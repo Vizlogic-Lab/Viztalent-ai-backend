@@ -1,0 +1,71 @@
+server:
+  port: ${SERVER_PORT:8000}
+  shutdown: graceful
+
+spring:
+  application:
+    name: backend-classic
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:15433/smartstaff_classic}
+    username: ${DB_USERNAME:smartstaff_classic}
+    password: ${POSTGRES_PASSWORD:smartstaff_classic_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 100MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-32bytes-min}
+    ttl-minutes: ${JWT_TTL_MINUTES:1440}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
+  storage:
+    dir: ${STORAGE_DIR:./storage}
+  jobs:
+    max-retained: 100
+  encryption:
+    key: ${APP_ENCRYPTION_KEY:dev-only-encryption-key-change-me}
+  # External APIs — configurable so tests (and local demos) can point at a stub.
+  gemini:
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    model: ${GEMINI_MODEL:gemini-3.5-flash}
+  twilio:
+    api-base-url: ${TWILIO_API_BASE_URL:https://api.twilio.com}
+  # In-memory, per-IP, per-minute limits on the unauthenticated endpoints
+  # someone could hammer (see RateLimitFilter). Single-node only.
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
+    auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
+    token-per-minute: ${RATE_LIMIT_TOKEN_PER_MINUTE:30}
+
+# Only health is exposed, and without component details, so /actuator/health
+# is safe to leave public for load balancers / uptime checks.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    # requestId comes from RequestIdFilter (blank outside a request).
+    level: "%5p [%X{requestId:-}]"

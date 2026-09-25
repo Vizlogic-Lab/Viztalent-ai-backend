@@ -1,0 +1,24 @@
+# Build output
+target/
+
+# Uploaded résumés / JDs and generated job data (contains PII — never commit)
+storage/
+
+# Internal design & feature docs — not part of the shipped backend
+docs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Local env / secrets
+.env
+*.env
+application-local.yml
+application-local.yaml
+
+# Logs & OS cruft
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,33 @@
+# backend-classic — isolated local Postgres for this backend only.
+#
+# Deliberately separate from ../infra/docker-compose.yml (which backs the
+# other smartstaff/backend microservices for frontend-v2) so table names
+# and data never collide. Host port 15433 avoids native Postgres (5432)
+# and the other stack's Docker Postgres (15432).
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down          # stop (keeps data)
+#   docker compose down -v       # stop AND delete data
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: backend-classic-postgres
+    environment:
+      POSTGRES_DB: smartstaff_classic
+      POSTGRES_USER: smartstaff_classic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstaff_classic_dev}
+    ports:
+      - "15433:5432"
+    volumes:
+      - backend_classic_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartstaff_classic -d smartstaff_classic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  backend_classic_pg_data:

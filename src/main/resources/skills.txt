@@ -1,0 +1,146 @@
+# One skill per line, matched case-insensitively as a whole word/phrase
+# against extracted JD/resume text. Keep additions lowercase; display casing
+# is applied separately (see SkillDictionary.canonicalCasing).
+java
+python
+javascript
+typescript
+c++
+c#
+go
+golang
+rust
+ruby
+php
+kotlin
+swift
+scala
+r
+matlab
+sql
+html
+css
+sass
+less
+react
+react native
+angular
+vue
+next.js
+nuxt
+redux
+node.js
+express
+spring
+spring boot
+django
+flask
+fastapi
+laravel
+ruby on rails
+asp.net
+.net
+graphql
+rest apis
+grpc
+microservices
+postgresql
+mysql
+mongodb
+redis
+elasticsearch
+cassandra
+dynamodb
+oracle
+sql server
+sqlite
+kafka
+rabbitmq
+docker
+kubernetes
+terraform
+ansible
+jenkins
+github actions
+gitlab ci
+circleci
+aws
+azure
+gcp
+google cloud
+lambda
+ec2
+s3
+cloudformation
+linux
+bash
+powershell
+git
+jira
+confluence
+agile
+scrum
+tdd
+ci/cd
+machine learning
+deep learning
+tensorflow
+pytorch
+scikit-learn
+pandas
+numpy
+data analysis
+data engineering
+etl
+power bi
+tableau
+excel
+statistics
+nlp
+computer vision
+opencv
+android
+ios
+flutter
+xamarin
+unity
+unreal engine
+webpack
+vite
+babel
+jest
+mocha
+cypress
+selenium
+junit
+mockito
+figma
+sketch
+adobe xd
+ui/ux
+accessibility
+responsive design
+seo
+salesforce
+sap
+servicenow
+tableau
+looker
+snowflake
+databricks
+airflow
+spark
+hadoop
+big data
+blockchain
+solidity
+web3
+cybersecurity
+penetration testing
+network security
+oauth
+jwt
+active directory
+vmware
+windows server
+itil
