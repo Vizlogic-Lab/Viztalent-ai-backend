@@ -75,6 +75,13 @@ public class AuthServiceImpl implements AuthService {
         Role role = parseRole(req.role());
 
         if (role == Role.ADMIN) {
+            // Only an existing admin may create another admin. A visitor hitting the
+            // public /signup form with role=admin is refused (the seeder guarantees a
+            // bootstrap admin already exists, so this never locks anyone out).
+            if (!requesterIsAdmin) {
+                throw new ApiException(HttpStatus.FORBIDDEN,
+                        "Only an existing admin can create an admin account.", "admin_only");
+            }
             if (req.email() == null || req.email().isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Email is required for an admin account.");
             }

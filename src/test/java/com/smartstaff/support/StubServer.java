@@ -25,7 +25,7 @@ import java.util.function.Function;
  *  request is recorded so tests can assert on what the app actually sent. */
 public final class StubServer {
 
-    public record RecordedRequest(String method, String path, String query, String body, String authorization) {}
+    public record RecordedRequest(String method, String path, String query, String body, String authorization, String apiKeyHeader) {}
 
     public record StubResponse(int status, String body) {
         public static StubResponse json(int status, String body) {
@@ -94,7 +94,8 @@ public final class StubServer {
                 exchange.getRequestURI().getPath(),
                 exchange.getRequestURI().getRawQuery(),
                 body,
-                exchange.getRequestHeaders().getFirst("Authorization"));
+                exchange.getRequestHeaders().getFirst("Authorization"),
+                exchange.getRequestHeaders().getFirst("x-goog-api-key"));
         requests.add(recorded);
 
         StubResponse response = null;

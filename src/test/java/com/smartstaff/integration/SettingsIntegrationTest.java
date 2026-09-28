@@ -49,7 +49,7 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         JsonNode gemini = json.readTree(response).path("gemini");
         assertThat(gemini.path("configured").asBoolean()).isTrue();
         assertThat(gemini.path("has_key").asBoolean()).isTrue();
-        assertThat(gemini.path("model").asText()).isEqualTo("gemini-3.5-flash");
+        assertThat(gemini.path("model").asText()).isEqualTo("gemini-2.0-flash");
         assertThat(gemini.path("key_preview").asText()).isEqualTo("AIza…7890");
         assertThat(response).as("the full key must never be returned").doesNotContain(GEMINI_KEY);
 
@@ -84,7 +84,7 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         JsonNode accepted = bodyOf(postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk()));
         assertThat(accepted.path("ok").asBoolean()).isTrue();
         assertThat(accepted.path("model").asText()).isEqualTo("gemini-2.5-flash");
-        assertThat(STUB.requests("/v1beta/models").get(0).query()).contains("key=" + GEMINI_KEY);
+        assertThat(STUB.requests("/v1beta/models").get(0).apiKeyHeader()).isEqualTo(GEMINI_KEY);
 
         STUB.reset();
         STUB.respond("GET", "/v1beta/models", 400, "{\"error\":{\"message\":\"API key not valid.\"}}");

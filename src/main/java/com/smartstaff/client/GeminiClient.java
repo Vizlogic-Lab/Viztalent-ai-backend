@@ -67,7 +67,11 @@ public class GeminiClient {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 return restClient.post()
-                        .uri(baseUrl + "/v1beta/models/{model}:generateContent?key={key}", model, apiKey)
+                        .uri(baseUrl + "/v1beta/models/{model}:generateContent", model)
+                        // Key goes in a header, not the URL, so it never lands in access
+                        // logs, proxies, or browser history — Google supports both, and
+                        // the header is the safer form for a production secret.
+                        .header("x-goog-api-key", apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
@@ -99,7 +103,8 @@ public class GeminiClient {
     /** GET v1beta/models — only used to check that a saved key is accepted. */
     public String listModels(String apiKey) {
         return restClient.get()
-                .uri(baseUrl + "/v1beta/models?key={key}", apiKey)
+                .uri(baseUrl + "/v1beta/models")
+                .header("x-goog-api-key", apiKey)
                 .retrieve()
                 .body(String.class);
     }

@@ -64,6 +64,32 @@ class AuthIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("a visitor cannot self-register as admin via the public signup form")
+    void anonymousAdminSignupForbidden() throws Exception {
+        postJson("/api/auth/signup", Map.of(
+                        "role", "admin",
+                        "name", "Sneaky",
+                        "email", "sneaky@example.com",
+                        "password", "Passw0rd!"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("admin_only"));
+    }
+
+    @Test
+    @DisplayName("an existing admin can create another admin account")
+    void adminCanCreateAdmin() throws Exception {
+        Account admin = newAdmin();
+        postJsonAs(admin, "/api/auth/signup", Map.of(
+                        "role", "admin",
+                        "name", "Second Admin",
+                        "email", "second.admin@example.com",
+                        "password", "Passw0rd!"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token", not(emptyOrNullString())))
+                .andExpect(jsonPath("$.account.role").value("admin"));
+    }
+
+    @Test
     @DisplayName("protected endpoints answer 401 with the standard JSON error when no token is sent")
     void tokenRequired() throws Exception {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/jobs"))

@@ -89,7 +89,7 @@ class RecruiterChatIntegrationTest extends IntegrationTestBase {
         assertThat(declaration.path("parameters").path("type").asText()).isEqualTo("OBJECT");
         assertThat(declaration.path("parameters").path("properties").path("job_description").path("type").asText()).isEqualTo("STRING");
         assertThat(declaration.path("parameters").path("required").get(0).asText()).isEqualTo("job_description");
-        assertThat(STUB.requests("/v1beta/models/").get(0).query()).contains("key=AIza-test-key-123");
+        assertThat(STUB.requests("/v1beta/models/").get(0).apiKeyHeader()).isEqualTo("AIza-test-key-123");
     }
 
     @Test

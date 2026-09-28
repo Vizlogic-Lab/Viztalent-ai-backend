@@ -191,7 +191,7 @@ class AssessmentIntegrationTest extends IntegrationTestBase {
         var calls = STUB.requests("/v1beta/models/");
         assertThat(calls).hasSize(3);
         assertThat(calls.get(0).path()).endsWith(":generateContent");
-        assertThat(calls.get(0).query()).contains("key=AIza-test-key-123");
+        assertThat(calls.get(0).apiKeyHeader()).isEqualTo("AIza-test-key-123");
         JsonNode sent = json.readTree(calls.get(0).body());
         assertThat(sent.path("generationConfig").path("responseMimeType").asText()).isEqualTo("application/json");
         String prompt = sent.path("contents").get(0).path("parts").get(0).path("text").asText();

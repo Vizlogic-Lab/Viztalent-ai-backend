@@ -41,7 +41,7 @@ app:
   # External APIs — configurable so tests (and local demos) can point at a stub.
   gemini:
     base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
-    model: ${GEMINI_MODEL:gemini-3.5-flash}
+    model: ${GEMINI_MODEL:gemini-2.0-flash}
   twilio:
     api-base-url: ${TWILIO_API_BASE_URL:https://api.twilio.com}
   # In-memory, per-IP, per-minute limits on the unauthenticated endpoints
