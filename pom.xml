@@ -97,6 +97,15 @@
       <version>5.2.5</version>
     </dependency>
 
+    <!-- Scorecard PDF export (GET /api/scorecard/{jobId}/{attemptId}). OpenPDF
+         is the maintained LGPL/MPL fork of iText 4 — programmatic PDF, no
+         browser or native deps. -->
+    <dependency>
+      <groupId>com.github.librepdf</groupId>
+      <artifactId>openpdf</artifactId>
+      <version>2.0.3</version>
+    </dependency>
+
     <!-- JD / resume text extraction — targeted modules only (not the huge
          tika-parsers-standard-package), same approach as the other backend's
          resume-processor. Excludes xml-apis/xercesImpl, which shadow the JDK's

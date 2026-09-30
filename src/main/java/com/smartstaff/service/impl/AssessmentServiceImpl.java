@@ -8,6 +8,8 @@ import com.smartstaff.mapper.AssessmentMapper;
 import com.smartstaff.repository.*;
 import com.smartstaff.service.AssessmentQueuedEvent;
 import com.smartstaff.service.AssessmentService;
+import com.smartstaff.service.ScorecardPdfService;
+import com.smartstaff.service.ScorecardPdfService.ScorecardPdf;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.BlueprintFactory;
 import com.smartstaff.util.RoleProfileRules;
@@ -42,6 +44,7 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final AssessmentAnswerRepository assessmentAnswerRepository;
     private final AssessmentScorecardRepository assessmentScorecardRepository;
     private final AssessmentScoringJob assessmentScoringJob;
+    private final ScorecardPdfService scorecardPdfService;
     private final QuestionBankItemRepository questionBankItemRepository;
     private final JobRoleProfileRepository roleProfileRepository;
     private final SettingsService settingsService;
@@ -57,6 +60,7 @@ public class AssessmentServiceImpl implements AssessmentService {
                                   AssessmentAnswerRepository assessmentAnswerRepository,
                                   AssessmentScorecardRepository assessmentScorecardRepository,
                                   AssessmentScoringJob assessmentScoringJob,
+                                  ScorecardPdfService scorecardPdfService,
                                   QuestionBankItemRepository questionBankItemRepository,
                                   JobRoleProfileRepository roleProfileRepository,
                                   SettingsService settingsService,
@@ -71,6 +75,7 @@ public class AssessmentServiceImpl implements AssessmentService {
         this.assessmentAnswerRepository = assessmentAnswerRepository;
         this.assessmentScorecardRepository = assessmentScorecardRepository;
         this.assessmentScoringJob = assessmentScoringJob;
+        this.scorecardPdfService = scorecardPdfService;
         this.questionBankItemRepository = questionBankItemRepository;
         this.roleProfileRepository = roleProfileRepository;
         this.settingsService = settingsService;
@@ -252,7 +257,25 @@ public class AssessmentServiceImpl implements AssessmentService {
         AssessmentAttempt attempt = attemptForJob(jobId, attemptId);
         AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(attemptId).orElse(null);
         if (card == null) return ScorecardResponse.none(attemptId.toString());
+        return toScorecardResponse(attempt, card);
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ScorecardPdf scorecardPdf(UUID jobId, UUID attemptId) {
+        AssessmentAttempt attempt = attemptForJob(jobId, attemptId);
+        AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(attemptId)
+                .filter(c -> c.getStatus() == ScorecardStatus.SCORED)
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
+                        "This attempt hasn't been scored yet.", "not_scored"));
+        byte[] pdf = scorecardPdfService.render(attempt.getJob().getTitle(), toScorecardResponse(attempt, card));
+        String who = attempt.getCandidateName() != null && !attempt.getCandidateName().isBlank()
+                ? attempt.getCandidateName() : attempt.getCandidateEmail();
+        String filename = "scorecard-" + slug(who) + "-v" + attempt.getAssessment().getVersion() + ".pdf";
+        return new ScorecardPdf(filename, pdf);
+    }
+
+    private ScorecardResponse toScorecardResponse(AssessmentAttempt attempt, AssessmentScorecard card) {
         List<ScorecardResponse.QuestionScoreView> questions = card.getQuestionScores().stream()
                 .map(q -> new ScorecardResponse.QuestionScoreView(
                         q.getQuestion().getId().toString(), q.getLevel(), q.getSeq(), q.getType(),
@@ -260,11 +283,17 @@ public class AssessmentServiceImpl implements AssessmentService {
                         q.isNeedsReview(), q.isAnswered(), q.getTestsPassed(), q.getTestsTotal(),
                         q.getDetail(), q.getBreakdown()))
                 .toList();
-        return new ScorecardResponse(true, card.getStatus().name(), attemptId.toString(),
+        return new ScorecardResponse(true, card.getStatus().name(), attempt.getId().toString(),
                 attempt.getCandidateEmail(), attempt.getCandidateName(), attempt.getLevels(),
                 attempt.getAssessment().getVersion(), card.getTotalScore(), card.getMaxScore(), card.getPercent(),
                 card.getPassThreshold(), card.isPassed(), card.isNeedsReview(), card.getReviewPoints(),
                 card.getError(), attempt.getSubmittedAt(), card.getScoredAt(), questions);
+    }
+
+    private static String slug(String s) {
+        if (s == null || s.isBlank()) return "candidate";
+        String slug = s.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        return slug.isBlank() ? "candidate" : slug;
     }
 
     @Override

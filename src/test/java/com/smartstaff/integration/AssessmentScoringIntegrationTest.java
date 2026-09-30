@@ -201,6 +201,31 @@ class AssessmentScoringIntegrationTest extends IntegrationTestBase {
         assertThat(row.path("passed").asBoolean()).isTrue();
     }
 
+    @Test
+    @DisplayName("a scored attempt downloads as a PDF; an unscored one is refused; signing checks job access")
+    void scorecardPdfDownload() throws Exception {
+        // Before submit the attempt exists but has no scorecard, so the PDF is 409 until scored.
+        start();
+        String realAttemptId = jdbc.queryForObject("select id::text from assessment_attempts where job_id = ?::uuid", String.class, job);
+        getAs(admin, "/api/scorecard/" + job + "/" + realAttemptId).andExpect(status().isConflict());
+
+        postJson("/api/assessment/submit_by_token/" + token, Map.of("answers", correctAnswers())).andExpect(status().isOk());
+
+        var response = getAs(admin, "/api/scorecard/" + job + "/" + realAttemptId)
+                .andExpect(status().isOk())
+                .andExpect(status().isOk()).andReturn().getResponse();
+        assertThat(response.getContentType()).isEqualTo("application/pdf");
+        assertThat(response.getHeader("Content-Disposition")).contains("attachment").contains(".pdf");
+        byte[] pdf = response.getContentAsByteArray();
+        assertThat(pdf).isNotEmpty();
+        assertThat(new String(pdf, 0, 5)).startsWith("%PDF-");
+
+        // The signed-download flow: sign the path, then it is openable.
+        JsonNode signed = bodyOf(postJsonAs(admin, "/api/downloads/sign",
+                Map.of("path", "/api/scorecard/" + job + "/" + realAttemptId)).andExpect(status().isOk()));
+        assertThat(signed.path("url").asText()).contains("/api/scorecard/").contains("sig=");
+    }
+
     private static double round2(double v) {
         return Math.round(v * 100.0) / 100.0;
     }

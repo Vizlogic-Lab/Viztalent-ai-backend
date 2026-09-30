@@ -26,4 +26,7 @@ public interface AssessmentService {
     /** Re-run automatic scoring for a submitted attempt (e.g. after the runner
      *  or Gemini was down). */
     void rescore(UUID jobId, UUID attemptId);
+
+    /** The scorecard rendered as a downloadable PDF (only once SCORED). */
+    ScorecardPdfService.ScorecardPdf scorecardPdf(UUID jobId, UUID attemptId);
 }
