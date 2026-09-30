@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface AssessmentQuestionRepository extends JpaRepository<AssessmentQuestion, UUID> {
 
-    List<AssessmentQuestion> findByAssessmentIdOrderByLevelAsc(UUID assessmentId);
+    List<AssessmentQuestion> findByAssessmentIdOrderByLevelAscSeqAsc(UUID assessmentId);
 
     long countByAssessmentId(UUID assessmentId);
 }

@@ -41,7 +41,20 @@ public final class RoleProfileRules {
                     "ci/cd", "ansible", "linux"),
             RoleFamily.QA, List.of("selenium", "cypress", "testing", "qa", "test automation", "playwright", "appium")));
 
+    /** Frameworks/libraries a coding question can meaningfully be about. */
+    private static final List<String> CODE_KEYWORDS = List.of(
+            "spring", "hibernate", "django", "flask", "fastapi", "express", "node", "react", "angular", "vue",
+            "next.js", "redux", "pandas", "numpy", "spark", "sql", "kafka", "junit", "selenium", "cypress",
+            "playwright", "android", "flutter", "react native", ".net", "rest api", "microservices", "jpa");
+
     private RoleProfileRules() {}
+
+    /** A skill a coding question can be about: a programming language or a
+     *  code framework (so "docker" or "excel" never get a CODE_WRITE slot). */
+    public static boolean isCodeSkill(String skill) {
+        String s = skill.toLowerCase(Locale.ROOT).trim();
+        return LANGUAGE_ALIASES.containsKey(s) || CODE_KEYWORDS.stream().anyMatch(k -> containsWord(s, k));
+    }
 
     /** Rule-based profile from the job's extracted skills and experience range. */
     public static JobRoleProfile fallback(Job job) {

@@ -5,65 +5,78 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
 import com.smartstaff.dto.request.AssessmentGenerateRequest;
 import com.smartstaff.dto.response.*;
-import com.smartstaff.entity.Assessment;
-import com.smartstaff.entity.AssessmentQuestion;
-import com.smartstaff.entity.Job;
-import com.smartstaff.entity.QuestionBankItem;
-import com.smartstaff.entity.User;
+import com.smartstaff.entity.*;
 import com.smartstaff.exception.ApiException;
-import com.smartstaff.repository.AssessmentQuestionRepository;
-import com.smartstaff.repository.AssessmentRepository;
-import com.smartstaff.repository.JobRepository;
-import com.smartstaff.repository.QuestionBankItemRepository;
+import com.smartstaff.mapper.AssessmentMapper;
+import com.smartstaff.repository.*;
 import com.smartstaff.service.AssessmentService;
 import com.smartstaff.service.SettingsService;
+import com.smartstaff.util.BlueprintFactory;
+import com.smartstaff.util.RoleProfileRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.*;
 
 /** Assessment generation (AI / Mix / Custom bank), status, and answer keys.
  *
- *  Generation runs synchronously inside the POST /api/assessment/generate
- *  call rather than on a background thread — see AssessmentStatusResponse's
- *  javadoc for why that's a safe, documented deviation from the "async, poll
- *  status" flow Candidates.jsx is written to tolerate. */
+ *  Each generation writes a new assessment version and moves is_current to
+ *  it; older versions stay for grading. Questions are built (including any
+ *  Gemini calls) before the database transaction opens. Generation is still
+ *  synchronous and MCQ/MSQ-only here; the async practical pipeline replaces
+ *  it in F4. */
 @Service
 public class AssessmentServiceImpl implements AssessmentService {
 
     private static final Logger log = LoggerFactory.getLogger(AssessmentServiceImpl.class);
 
-    private static final List<String> LEVELS = List.of("L1", "L2", "L3");
+    private static final List<String> LEVELS = BlueprintFactory.LEVELS;
     private static final Map<String, String> DIFFICULTY_BY_LEVEL = Map.of(
             "L1", "easy", "L2", "medium", "L3", "hard");
     private static final Set<String> VALID_SOURCES = Set.of("AI", "MIX", "CUSTOM");
     private static final int QUESTIONS_PER_LEVEL = 6;
+    private static final int LEGACY_POINTS = 5;
 
     private final JobRepository jobRepository;
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionRepository assessmentQuestionRepository;
     private final QuestionBankItemRepository questionBankItemRepository;
+    private final JobRoleProfileRepository roleProfileRepository;
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final GeminiClient geminiClient;
+    private final BlueprintFactory blueprintFactory;
+    private final AssessmentMapper assessmentMapper;
+    private final TransactionTemplate transaction;
 
     public AssessmentServiceImpl(JobRepository jobRepository,
                                   AssessmentRepository assessmentRepository,
                                   AssessmentQuestionRepository assessmentQuestionRepository,
                                   QuestionBankItemRepository questionBankItemRepository,
+                                  JobRoleProfileRepository roleProfileRepository,
                                   SettingsService settingsService,
                                   ObjectMapper objectMapper,
-                                  GeminiClient geminiClient) {
+                                  GeminiClient geminiClient,
+                                  BlueprintFactory blueprintFactory,
+                                  AssessmentMapper assessmentMapper,
+                                  PlatformTransactionManager transactionManager) {
         this.jobRepository = jobRepository;
         this.assessmentRepository = assessmentRepository;
         this.assessmentQuestionRepository = assessmentQuestionRepository;
         this.questionBankItemRepository = questionBankItemRepository;
+        this.roleProfileRepository = roleProfileRepository;
         this.settingsService = settingsService;
         this.objectMapper = objectMapper;
         this.geminiClient = geminiClient;
+        this.blueprintFactory = blueprintFactory;
+        this.assessmentMapper = assessmentMapper;
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     @Override
@@ -76,7 +89,7 @@ public class AssessmentServiceImpl implements AssessmentService {
     public AssessmentStatusResponse status(UUID jobId) {
         Optional<Job> job = jobRepository.findById(jobId);
         Optional<Assessment> assessment = job.isPresent()
-                ? assessmentRepository.findByJobId(jobId)
+                ? assessmentRepository.findByJobIdAndCurrentTrue(jobId)
                 : Optional.empty();
 
         String assessmentUrl = assessment.map(a -> assessmentUrl(job.get(), "L1")).orElse(null);
@@ -90,14 +103,13 @@ public class AssessmentServiceImpl implements AssessmentService {
                 0,
                 null,
                 assessmentUrl,
-                assessment.map(Assessment::isReady).orElse(false),
-                false,
+                assessment.map(a -> a.getStatus() == AssessmentStatus.READY).orElse(false),
+                assessment.map(a -> a.getStatus().inProgress()).orElse(false),
                 assessment.map(Assessment::getError).orElse(null)
         );
     }
 
     @Override
-    @Transactional
     public AssessmentGenerateResponse generate(AssessmentGenerateRequest req, User admin) {
         UUID jobId = parseSessionId(req.session_id());
         Job job = jobRepository.findById(jobId)
@@ -130,25 +142,10 @@ public class AssessmentServiceImpl implements AssessmentService {
                     null, null, null);
         }
 
-        // A job has at most one assessment (job_id is UNIQUE) — replace any
-        // prior one wholesale rather than trying to diff/merge question sets.
-        assessmentRepository.findByJobId(jobId).ifPresent(existing -> {
-            assessmentRepository.delete(existing);
-            assessmentRepository.flush();
-        });
+        JobRoleProfile profile = roleProfileRepository.findById(jobId).orElseGet(() -> RoleProfileRules.fallback(job));
+        Map<String, Blueprint> blueprints = blueprintFactory.createAll(profile);
 
-        Assessment assessment = new Assessment();
-        assessment.setJob(job);
-        assessment.setSource(source);
-        assessment.setReady(true);
-        assessmentRepository.save(assessment);
-
-        for (String level : LEVELS) {
-            for (AssessmentQuestion q : byLevel.get(level)) {
-                q.setAssessment(assessment);
-                assessmentQuestionRepository.save(q);
-            }
-        }
+        transaction.executeWithoutResult(status -> saveNewVersion(jobId, source, blueprints, byLevel));
 
         Map<String, String> urls = new LinkedHashMap<>();
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -160,16 +157,46 @@ public class AssessmentServiceImpl implements AssessmentService {
         return new AssessmentGenerateResponse("success", null, urls.get("L1"), urls, counts);
     }
 
+    /** New version = max + 1, made current. The job row lock serialises two
+     *  concurrent generations for the same job. */
+    private void saveNewVersion(UUID jobId, String source, Map<String, Blueprint> blueprints,
+                                Map<String, List<AssessmentQuestion>> byLevel) {
+        Job job = jobRepository.lockById(jobId)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST,
+                        "No job description found for this session — upload a JD first."));
+        int version = assessmentRepository.maxVersion(jobId) + 1;
+        assessmentRepository.clearCurrent(jobId);
+
+        Assessment assessment = new Assessment();
+        assessment.setJob(job);
+        assessment.setVersion(version);
+        assessment.setSource(source);
+        assessment.setBlueprint(blueprints);
+        assessment.setStatus(AssessmentStatus.READY);
+        assessment.setGeneratedAt(Instant.now());
+        assessment.setCurrent(true);
+        assessmentRepository.save(assessment);
+
+        for (String level : LEVELS) {
+            int seq = 0;
+            for (AssessmentQuestion q : byLevel.get(level)) {
+                q.setAssessment(assessment);
+                q.setSeq(seq++);
+                assessmentQuestionRepository.save(q);
+            }
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public AnswerKeyResponse answerKey(UUID jobId) {
         Job job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
-        Assessment assessment = assessmentRepository.findByJobId(jobId)
+        Assessment assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         "No assessment has been generated for this job yet."));
 
-        List<AssessmentQuestion> all = assessmentQuestionRepository.findByAssessmentIdOrderByLevelAsc(assessment.getId());
+        List<AssessmentQuestion> all = assessmentQuestionRepository.findByAssessmentIdOrderByLevelAscSeqAsc(assessment.getId());
         Map<String, List<AssessmentQuestion>> grouped = new LinkedHashMap<>();
         for (String level : LEVELS) grouped.put(level, new ArrayList<>());
         for (AssessmentQuestion q : all) {
@@ -178,8 +205,8 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         List<AnswerKeyLevelResponse> levels = new ArrayList<>();
         for (String level : LEVELS) {
-            List<AssessmentQuestion> qs = grouped.getOrDefault(level, List.of());
-            List<AssessmentQuestionResponse> questions = qs.stream().map(this::toQuestionResponse).toList();
+            List<AssessmentQuestionResponse> questions = grouped.getOrDefault(level, List.of()).stream()
+                    .map(assessmentMapper::toQuestionResponse).toList();
             levels.add(new AnswerKeyLevelResponse(level, questions.size(), questions));
         }
 
@@ -198,14 +225,12 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         int need = QUESTIONS_PER_LEVEL - questions.size();
         // AI generates its full share; MIX/CUSTOM only call out to Gemini to
-        // pad what the bank couldn't cover (CUSTOM's "AI only pads if short"
-        // promise in Candidates.jsx).
+        // pad what the bank couldn't cover.
         if (need > 0 && settingsService.getGeminiApiKeyOrNull() != null) {
             try {
                 questions.addAll(generateWithGemini(job, level, need));
             } catch (Exception e) {
                 log.warn("Gemini question generation failed for job {} level {}: {}", job.getId(), level, e.toString());
-                // Non-fatal — fall through with whatever the bank provided.
             }
         }
 
@@ -219,14 +244,16 @@ public class AssessmentServiceImpl implements AssessmentService {
         List<AssessmentQuestion> out = new ArrayList<>();
         for (QuestionBankItem item : items) {
             if (out.size() >= limit) break;
-            AssessmentQuestion q = new AssessmentQuestion();
-            q.setLevel(level);
-            q.setType(item.getType());
+            QuestionType type = QuestionType.fromBankType(item.getType());
+            AssessmentQuestion q = newQuestion(level, type);
             q.setPrompt(item.getPrompt());
             q.setOptions(new ArrayList<>(item.getOptions()));
             q.setCorrectIndices(new ArrayList<>(item.getCorrectIndices()));
             q.setSkill(item.getSkill());
             q.setDifficulty(item.getDifficulty() != null ? item.getDifficulty() : DIFFICULTY_BY_LEVEL.get(level));
+            // Bank coding/scenario items carry no solution, tests or model answer yet (F5).
+            q.setValidated(!type.isCode() && type != QuestionType.SCENARIO);
+            if (!q.isValidated()) q.setValidationLog("Imported from the question bank without a solution or tests.");
             out.add(q);
         }
         return out;
@@ -290,34 +317,40 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         List<String> options = new ArrayList<>();
         for (JsonNode o : node.path("options")) options.add(o.asText(""));
-        if (options.size() < 2) return null;
+        if (options.size() < 2 || new HashSet<>(options).size() != options.size()) return null;
 
         List<Integer> correct = new ArrayList<>();
         for (JsonNode i : node.path("correct_indices")) correct.add(i.asInt());
-        if (correct.isEmpty()) return null;
+        if (correct.isEmpty() || correct.stream().anyMatch(i -> i < 0 || i >= options.size())) return null;
 
-        String type = correct.size() > 1 ? "MSQ" : node.path("type").asText("MCQ").toUpperCase(Locale.ROOT);
-        if (!type.equals("MCQ") && !type.equals("MSQ")) type = correct.size() > 1 ? "MSQ" : "MCQ";
-
-        AssessmentQuestion q = new AssessmentQuestion();
-        q.setLevel(level);
-        q.setType(type);
+        AssessmentQuestion q = newQuestion(level, correct.size() > 1 ? QuestionType.MSQ : QuestionType.MCQ);
         q.setPrompt(question);
         q.setOptions(options);
         q.setCorrectIndices(correct);
         q.setSkill(node.path("skill").asText(null));
         q.setDifficulty(node.path("difficulty").asText(fallbackDifficulty));
+        q.setValidated(true);
+        return q;
+    }
+
+    private static AssessmentQuestion newQuestion(String level, QuestionType type) {
+        AssessmentQuestion q = new AssessmentQuestion();
+        q.setLevel(level);
+        q.setType(type);
+        q.setPoints(LEGACY_POINTS);
+        q.setTimeEstimateSec(switch (type) {
+            case MCQ -> 60;
+            case MSQ -> 90;
+            case CODE_WRITE -> 600;
+            case CODE_DEBUG -> 480;
+            case CODE_OUTPUT -> 180;
+            case SCENARIO -> 300;
+            case LOGIC -> 240;
+        });
         return q;
     }
 
     // ── shared helpers ──────────────────────────────────────────────────
-
-    private AssessmentQuestionResponse toQuestionResponse(AssessmentQuestion q) {
-        List<Integer> indices = q.getCorrectIndices();
-        Integer correctIndex = "MCQ".equals(q.getType()) && !indices.isEmpty() ? indices.get(0) : null;
-        List<Integer> correctIndices = "MSQ".equals(q.getType()) ? indices : null;
-        return new AssessmentQuestionResponse(q.getType(), q.getPrompt(), q.getOptions(), correctIndex, correctIndices, q.getSkill(), q.getDifficulty());
-    }
 
     private String assessmentUrl(Job job, String level) {
         String jd = job.jdNumberDisplay();

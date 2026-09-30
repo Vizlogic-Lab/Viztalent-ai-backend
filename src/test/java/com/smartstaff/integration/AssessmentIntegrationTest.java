@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class AssessmentIntegrationTest extends IntegrationTestBase {
 
-    // 3 questions for L1 (two MCQ, one MSQ), 2 for L2 (coding, descriptive), none for L3.
+    // 3 questions for L1 (two MCQ, one MSQ), 2 for L2 (legacy coding + descriptive), none for L3.
     private static final String BANK_CSV = """
             type,level,skill,difficulty,question,options,correct_index
             mcq,L1,Math,easy,What is 2+2?,3|4|5,1
@@ -90,7 +90,7 @@ class AssessmentIntegrationTest extends IntegrationTestBase {
         assertThat(l1.path("level").asText()).isEqualTo("L1");
         assertThat(l1.path("count").asInt()).isEqualTo(3);
         assertThat(types(l1)).containsExactlyInAnyOrder("MCQ", "MCQ", "MSQ");
-        assertThat(types(l2)).containsExactlyInAnyOrder("CODING", "DESCRIPTIVE");
+        assertThat(types(l2)).as("legacy bank types map to the new ones").containsExactlyInAnyOrder("CODE_WRITE", "SCENARIO");
         assertThat(key.path("levels").get(2).path("questions")).isEmpty();
 
         for (JsonNode q : l1.path("questions")) {
@@ -110,10 +110,11 @@ class AssessmentIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("status reflects the generated assessment; generating again replaces it rather than adding a second")
+    @DisplayName("status reflects the current version; generating again adds version 2 and keeps version 1 for grading")
     void statusAndRegeneration() throws Exception {
         uploadBank();
         generate("custom");
+        String v1 = jdbc.queryForObject("select id::text from assessments where job_id = ?::uuid", String.class, job);
         generate("custom");
 
         getAs(admin, "/api/assessment/status/" + job)
@@ -124,10 +125,13 @@ class AssessmentIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.generating").value(false))
                 .andExpect(jsonPath("$.assessment_url", containsString("/assessment/JD-")));
 
-        assertThat(jdbc.queryForObject("select count(*) from assessments where job_id = ?::uuid", Integer.class, job)).isEqualTo(1);
-        assertThat(jdbc.queryForObject(
-                "select count(*) from assessment_questions q join assessments a on a.id = q.assessment_id where a.job_id = ?::uuid",
-                Integer.class, job)).isEqualTo(5);
+        List<Map<String, Object>> versions = jdbc.queryForList(
+                "select id::text as id, version, is_current, status from assessments where job_id = ?::uuid order by version", job);
+        assertThat(versions).hasSize(2);
+        assertThat(versions.get(0)).containsEntry("id", v1).containsEntry("version", 1).containsEntry("is_current", false);
+        assertThat(versions.get(1)).containsEntry("version", 2).containsEntry("is_current", true).containsEntry("status", "READY");
+        assertThat(jdbc.queryForObject("select count(*) from assessment_questions where assessment_id = ?::uuid", Integer.class, v1))
+                .as("version 1's questions are kept").isEqualTo(5);
     }
 
     @Test
