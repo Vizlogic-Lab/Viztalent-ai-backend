@@ -1,9 +1,12 @@
 package com.smartstaff.controller;
 
 import com.smartstaff.dto.request.JdSkillsOnlyRequest;
+import com.smartstaff.dto.request.RoleProfileRequest;
+import com.smartstaff.dto.request.SkillsUpdateRequest;
 import com.smartstaff.dto.response.*;
 import com.smartstaff.entity.User;
 import com.smartstaff.service.JobService;
+import com.smartstaff.service.RoleProfileService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,9 +23,11 @@ import java.util.UUID;
 public class JobController {
 
     private final JobService jobService;
+    private final RoleProfileService roleProfileService;
 
-    public JobController(JobService jobService) {
+    public JobController(JobService jobService, RoleProfileService roleProfileService) {
         this.jobService = jobService;
+        this.roleProfileService = roleProfileService;
     }
 
     @PostMapping(value = "/api/upload_jd", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -84,6 +89,38 @@ public class JobController {
     public ResponseEntity<byte[]> downloadResume(@PathVariable UUID jobId, @PathVariable String fileName) {
         return asAttachment(jobService.loadResumeFile(jobId, fileName));
     }
+
+    // ── Role Profile endpoints ──────────────────────────────────────────
+
+    @GetMapping("/api/jobs/{id}/role_profile")
+    @PreAuthorize("@jobAccess.canAccessJob(#id, authentication)")
+    public ResponseEntity<RoleProfileResponse> getRoleProfile(@PathVariable UUID id) {
+        return ResponseEntity.ok(roleProfileService.getRoleProfile(id));
+    }
+
+    @PutMapping("/api/jobs/{id}/role_profile")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SimpleResponse> updateRoleProfile(
+            @PathVariable UUID id,
+            @Valid @RequestBody RoleProfileRequest request,
+            @AuthenticationPrincipal User editor
+    ) {
+        roleProfileService.updateRoleProfile(id, request, editor.getId());
+        return ResponseEntity.ok(SimpleResponse.OK);
+    }
+
+    @PutMapping("/api/jobs/{id}/skills")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SimpleResponse> updateSkills(
+            @PathVariable UUID id,
+            @Valid @RequestBody SkillsUpdateRequest request,
+            @AuthenticationPrincipal User editor
+    ) {
+        jobService.updateJobSkills(id, request, editor);
+        return ResponseEntity.ok(SimpleResponse.OK);
+    }
+
+    // ────────────────────────────────────────────────────────────────────
 
     private ResponseEntity<byte[]> asAttachment(JobService.StoredFile file) {
         return ResponseEntity.ok()

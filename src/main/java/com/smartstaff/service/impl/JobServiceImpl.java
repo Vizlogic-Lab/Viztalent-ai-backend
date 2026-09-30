@@ -361,6 +361,33 @@ public class JobServiceImpl implements JobService {
         return candidate;
     }
 
+    @Override
+    @Transactional
+    public void updateJobSkills(UUID jobId, com.smartstaff.dto.request.SkillsUpdateRequest request, User requester) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
+
+        // Check if requester is the owner or admin
+        if (!requester.getRole().name().equals("ADMIN") && !job.getOwnerId().equals(requester.publicId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You cannot edit this job's skills.");
+        }
+
+        if (request.must_have_skills() != null) {
+            job.setMustHaveSkills(request.must_have_skills());
+        }
+        if (request.nice_to_have_skills() != null) {
+            job.setNiceToHaveSkills(request.nice_to_have_skills());
+        }
+        if (request.experience_min_years() != null) {
+            job.setExperienceMinYears(request.experience_min_years());
+        }
+        if (request.experience_max_years() != null) {
+            job.setExperienceMaxYears(request.experience_max_years());
+        }
+
+        jobRepository.save(job);
+    }
+
     private static String guessContentType(String filename) {
         if (filename == null) return "application/octet-stream";
         String lower = filename.toLowerCase(Locale.ROOT);

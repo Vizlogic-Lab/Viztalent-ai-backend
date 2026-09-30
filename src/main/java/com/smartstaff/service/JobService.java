@@ -1,6 +1,7 @@
 package com.smartstaff.service;
 
 import com.smartstaff.dto.request.JdSkillsOnlyRequest;
+import com.smartstaff.dto.request.SkillsUpdateRequest;
 import com.smartstaff.dto.response.*;
 import com.smartstaff.entity.User;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,6 +28,9 @@ public interface JobService {
     StoredFile loadJdFile(UUID jobId);
 
     StoredFile loadResumeFile(UUID jobId, String filename);
+
+    /** Update job's must/nice skills and experience range. Does not trigger re-screening. */
+    void updateJobSkills(UUID jobId, SkillsUpdateRequest request, User requester);
 
     /** A file's bytes + the name/content-type to serve it under. */
     record StoredFile(byte[] bytes, String filename, String contentType) {}
