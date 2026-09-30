@@ -59,10 +59,32 @@ public final class PracticalStubs {
 
     public static Function<RecordedRequest, StubResponse> draftResponder(Map<String, Variant> variants) {
         return req -> {
+            // Grading calls (F9) have no "skill" in their schema; drafting calls always do.
+            JsonNode props = read(req.body()).path("generationConfig").path("responseSchema").path("properties");
+            if (!props.has("skill")) {
+                return StubResponse.json(200, Fixtures.geminiText(props.has("criteria") ? rubricGrade() : scenarioGrade()));
+            }
             String type = typeOf(req);
             String draft = draft(type, targetSkill(req), variants.getOrDefault(type, Variant.VALID));
             return StubResponse.json(200, Fixtures.geminiText(draft));
         };
+    }
+
+    /** Fake AI grade: full marks for every CODE_WRITE rubric criterion (scores
+     *  are clamped to each criterion's weight, so a big number = full). */
+    static String rubricGrade() {
+        ArrayNode criteria = JSON.createArrayNode();
+        for (String c : new String[] {"approach", "complexity", "edge_cases", "readability"}) {
+            criteria.addObject().put("criterion", c).put("score", 100).put("note", "solid");
+        }
+        return JSON.createObjectNode().set("criteria", criteria).toString();
+    }
+
+    /** Fake AI grade: every key point (indices 1..12) covered. */
+    static String scenarioGrade() {
+        ArrayNode points = JSON.createArrayNode();
+        for (int i = 1; i <= 12; i++) points.addObject().put("index", i).put("covered", true).put("note", "");
+        return JSON.createObjectNode().set("key_points", points).toString();
     }
 
     public static String typeOf(RecordedRequest req) {

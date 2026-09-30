@@ -40,6 +40,8 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final AssessmentQuestionRepository assessmentQuestionRepository;
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final AssessmentAnswerRepository assessmentAnswerRepository;
+    private final AssessmentScorecardRepository assessmentScorecardRepository;
+    private final AssessmentScoringJob assessmentScoringJob;
     private final QuestionBankItemRepository questionBankItemRepository;
     private final JobRoleProfileRepository roleProfileRepository;
     private final SettingsService settingsService;
@@ -53,6 +55,8 @@ public class AssessmentServiceImpl implements AssessmentService {
                                   AssessmentQuestionRepository assessmentQuestionRepository,
                                   AssessmentAttemptRepository assessmentAttemptRepository,
                                   AssessmentAnswerRepository assessmentAnswerRepository,
+                                  AssessmentScorecardRepository assessmentScorecardRepository,
+                                  AssessmentScoringJob assessmentScoringJob,
                                   QuestionBankItemRepository questionBankItemRepository,
                                   JobRoleProfileRepository roleProfileRepository,
                                   SettingsService settingsService,
@@ -65,6 +69,8 @@ public class AssessmentServiceImpl implements AssessmentService {
         this.assessmentQuestionRepository = assessmentQuestionRepository;
         this.assessmentAttemptRepository = assessmentAttemptRepository;
         this.assessmentAnswerRepository = assessmentAnswerRepository;
+        this.assessmentScorecardRepository = assessmentScorecardRepository;
+        this.assessmentScoringJob = assessmentScoringJob;
         this.questionBankItemRepository = questionBankItemRepository;
         this.roleProfileRepository = roleProfileRepository;
         this.settingsService = settingsService;
@@ -83,6 +89,7 @@ public class AssessmentServiceImpl implements AssessmentService {
             for (String level : a.getLevels()) {
                 numQuestions += (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getAssessment().getId(), level);
             }
+            AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(a.getId()).orElse(null);
             rows.add(new AssessmentSubmissionsResponse.SubmissionSummary(
                     a.getId().toString(),
                     a.getCandidateEmail(),
@@ -95,7 +102,11 @@ public class AssessmentServiceImpl implements AssessmentService {
                     a.getStartedAt(),
                     a.getSubmittedAt(),
                     a.isAutoSubmitted(),
-                    a.getAssessment().getVersion()));
+                    a.getAssessment().getVersion(),
+                    card == null ? null : card.getStatus().name(),
+                    card == null ? null : card.getPercent(),
+                    card == null ? null : card.isPassed(),
+                    card == null ? null : card.isNeedsReview()));
         }
         return new AssessmentSubmissionsResponse(true, rows, 50);
     }
@@ -233,6 +244,45 @@ public class AssessmentServiceImpl implements AssessmentService {
         }
 
         return new AnswerKeyResponse(true, job.getTitle(), levels);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ScorecardResponse scorecard(UUID jobId, UUID attemptId) {
+        AssessmentAttempt attempt = attemptForJob(jobId, attemptId);
+        AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(attemptId).orElse(null);
+        if (card == null) return ScorecardResponse.none(attemptId.toString());
+
+        List<ScorecardResponse.QuestionScoreView> questions = card.getQuestionScores().stream()
+                .map(q -> new ScorecardResponse.QuestionScoreView(
+                        q.getQuestion().getId().toString(), q.getLevel(), q.getSeq(), q.getType(),
+                        q.getQuestion().getSkill(), q.getMaxPoints(), q.getScore(), q.isAutoGraded(),
+                        q.isNeedsReview(), q.isAnswered(), q.getTestsPassed(), q.getTestsTotal(),
+                        q.getDetail(), q.getBreakdown()))
+                .toList();
+        return new ScorecardResponse(true, card.getStatus().name(), attemptId.toString(),
+                attempt.getCandidateEmail(), attempt.getCandidateName(), attempt.getLevels(),
+                attempt.getAssessment().getVersion(), card.getTotalScore(), card.getMaxScore(), card.getPercent(),
+                card.getPassThreshold(), card.isPassed(), card.isNeedsReview(), card.getReviewPoints(),
+                card.getError(), attempt.getSubmittedAt(), card.getScoredAt(), questions);
+    }
+
+    @Override
+    public void rescore(UUID jobId, UUID attemptId) {
+        AssessmentAttempt attempt = transaction.execute(s -> attemptForJob(jobId, attemptId));
+        if (attempt == null || attempt.getStatus() != AttemptStatus.SUBMITTED) {
+            throw new ApiException(HttpStatus.CONFLICT, "This attempt hasn't been submitted, so there's nothing to score.");
+        }
+        assessmentScoringJob.run(attemptId);
+    }
+
+    private AssessmentAttempt attemptForJob(UUID jobId, UUID attemptId) {
+        AssessmentAttempt attempt = assessmentAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Attempt not found."));
+        if (!attempt.getJob().getId().equals(jobId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Attempt not found.");
+        }
+        return attempt;
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

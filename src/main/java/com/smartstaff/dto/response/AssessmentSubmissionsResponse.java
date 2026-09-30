@@ -23,7 +23,11 @@ public record AssessmentSubmissionsResponse(boolean ok, List<SubmissionSummary> 
             Instant started_at,
             Instant submitted_at,
             boolean auto_submitted,
-            Integer version
+            Integer version,
+            String score_status,
+            java.math.BigDecimal percent,
+            Boolean passed,
+            Boolean needs_review
     ) {}
 
     public static AssessmentSubmissionsResponse empty() {

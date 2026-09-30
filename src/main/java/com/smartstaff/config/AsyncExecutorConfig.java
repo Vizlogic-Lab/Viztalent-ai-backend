@@ -39,4 +39,17 @@ public class AsyncExecutorConfig {
         executor.initialize();
         return executor;
     }
+
+    /** Scoring a submitted attempt: runs the candidate's code and calls Gemini. */
+    @Bean(name = "scoringExecutor")
+    public Executor scoringExecutor(@Value("${app.async.inline:false}") boolean inline) {
+        if (inline) return new SyncTaskExecutor();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("assessment-score-");
+        executor.initialize();
+        return executor;
+    }
 }

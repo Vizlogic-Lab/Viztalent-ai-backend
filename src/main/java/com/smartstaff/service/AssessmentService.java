@@ -18,4 +18,12 @@ public interface AssessmentService {
     AssessmentGenerateResponse generate(AssessmentGenerateRequest req, User admin);
 
     AnswerKeyResponse answerKey(UUID jobId);
+
+    /** The scorecard for one attempt of this job (or a NONE placeholder while
+     *  it is still being scored). */
+    ScorecardResponse scorecard(UUID jobId, UUID attemptId);
+
+    /** Re-run automatic scoring for a submitted attempt (e.g. after the runner
+     *  or Gemini was down). */
+    void rescore(UUID jobId, UUID attemptId);
 }

@@ -52,6 +52,19 @@ public class AssessmentController {
         return ResponseEntity.ok(assessmentService.answerKey(jobId));
     }
 
+    @GetMapping("/api/assessment/scorecard/{jobId}/{attemptId}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<ScorecardResponse> scorecard(@PathVariable UUID jobId, @PathVariable UUID attemptId) {
+        return ResponseEntity.ok(assessmentService.scorecard(jobId, attemptId));
+    }
+
+    @PostMapping("/api/assessment/rescore/{jobId}/{attemptId}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<SimpleResponse> rescore(@PathVariable UUID jobId, @PathVariable UUID attemptId) {
+        assessmentService.rescore(jobId, attemptId);
+        return ResponseEntity.ok(SimpleResponse.OK);
+    }
+
     // ── Public, token-based (candidate-facing) ──────────────────────────
 
     @GetMapping("/api/assessment/by_token/{token}")

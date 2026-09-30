@@ -12,6 +12,7 @@ import com.smartstaff.entity.*;
 import com.smartstaff.exception.ApiException;
 import com.smartstaff.mapper.AssessmentMapper;
 import com.smartstaff.repository.*;
+import com.smartstaff.service.AttemptSubmittedEvent;
 import com.smartstaff.service.CandidateAssessmentService;
 import com.smartstaff.service.CodeRunnerService;
 import com.smartstaff.service.CodeRunnerService.RunResult;
@@ -19,6 +20,7 @@ import com.smartstaff.service.CodeRunnerService.RunStatus;
 import com.smartstaff.service.CodeRunnerService.TestInput;
 import com.smartstaff.service.CodeRunnerService.TestResult;
 import com.smartstaff.util.FileStorageService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,19 +46,22 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
     private final AssessmentQuestionRepository questionRepository;
     private final AssessmentMapper assessmentMapper;
     private final CodeRunnerService codeRunner;
+    private final ApplicationEventPublisher events;
 
     public CandidateAssessmentServiceImpl(InviteRepository inviteRepository,
                                           AssessmentAttemptRepository attemptRepository,
                                           AssessmentAnswerRepository answerRepository,
                                           AssessmentQuestionRepository questionRepository,
                                           AssessmentMapper assessmentMapper,
-                                          CodeRunnerService codeRunner) {
+                                          CodeRunnerService codeRunner,
+                                          ApplicationEventPublisher events) {
         this.inviteRepository = inviteRepository;
         this.attemptRepository = attemptRepository;
         this.answerRepository = answerRepository;
         this.questionRepository = questionRepository;
         this.assessmentMapper = assessmentMapper;
         this.codeRunner = codeRunner;
+        this.events = events;
     }
 
     // ── by_token ────────────────────────────────────────────────────────
@@ -211,6 +216,8 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
         attempt.setAutoSubmitted(auto);
         attempt.setSubmittedAt(auto ? attempt.getDeadline() : now);
         attemptRepository.save(attempt);
+        // Scoring runs after this transaction commits (AssessmentScoringListener).
+        events.publishEvent(new AttemptSubmittedEvent(attempt.getId()));
     }
 
     // ── answers ─────────────────────────────────────────────────────────
