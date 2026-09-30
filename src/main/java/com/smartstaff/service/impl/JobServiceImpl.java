@@ -12,12 +12,15 @@ import com.smartstaff.mapper.JobMapper;
 import com.smartstaff.repository.CandidateRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.repository.ResumeRepository;
+import com.smartstaff.service.JdUploadedEvent;
 import com.smartstaff.service.JobService;
+import com.smartstaff.service.RoleProfileService;
 import com.smartstaff.util.ExperienceParser;
 import com.smartstaff.util.FileStorageService;
 import com.smartstaff.util.SkillDictionary;
 import com.smartstaff.util.TextExtractor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +48,8 @@ public class JobServiceImpl implements JobService {
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
     private final int maxRetainedJobs;
+    private final ApplicationEventPublisher events;
+    private final RoleProfileService roleProfileService;
 
     public JobServiceImpl(
             JobRepository jobRepository,
@@ -56,7 +61,9 @@ public class JobServiceImpl implements JobService {
             TextExtractor textExtractor,
             SkillDictionary skillDictionary,
             ExperienceParser experienceParser,
-            @Value("${app.jobs.max-retained}") int maxRetainedJobs
+            @Value("${app.jobs.max-retained}") int maxRetainedJobs,
+            ApplicationEventPublisher events,
+            RoleProfileService roleProfileService
     ) {
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
@@ -68,6 +75,8 @@ public class JobServiceImpl implements JobService {
         this.skillDictionary = skillDictionary;
         this.experienceParser = experienceParser;
         this.maxRetainedJobs = maxRetainedJobs;
+        this.events = events;
+        this.roleProfileService = roleProfileService;
     }
 
     @Override
@@ -108,6 +117,7 @@ public class JobServiceImpl implements JobService {
         applyOwner(job, owner);
 
         jobRepository.save(job);
+        events.publishEvent(new JdUploadedEvent(job.getId()));
         List<EvictedJobResponse> evicted = evictOldestBeyondCap();
 
         int skillCount = classified.mustHave().size() + classified.niceToHave().size();
@@ -161,6 +171,7 @@ public class JobServiceImpl implements JobService {
         applyOwner(job, owner);
 
         jobRepository.save(job);
+        events.publishEvent(new JdUploadedEvent(job.getId()));
         List<EvictedJobResponse> evicted = evictOldestBeyondCap();
 
         return new JdUploadResponse(
@@ -218,7 +229,7 @@ public class JobServiceImpl implements JobService {
         Job job = getJobOr404(jobId);
         List<CandidateRowResponse> candidates = candidateRepository.findByJobIdOrderByFitScoreDesc(jobId)
                 .stream().map(candidateMapper::toRowResponse).toList();
-        return jobMapper.toDetailResponse(job, candidates);
+        return jobMapper.toDetailResponse(job, candidates, roleProfileService.findRoleProfile(jobId).orElse(null));
     }
 
     @Override
@@ -367,28 +378,31 @@ public class JobServiceImpl implements JobService {
     @Override
     @Transactional
     public void updateJobSkills(UUID jobId, com.smartstaff.dto.request.SkillsUpdateRequest request, User requester) {
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
-
-        // Check if requester is the owner or admin
-        if (!requester.getRole().name().equals("ADMIN") && !job.getOwnerId().equals(requester.publicId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "You cannot edit this job's skills.");
+        Job job = getJobOr404(jobId);
+        boolean isOwner = job.getOwnerId() != null && job.getOwnerId().equalsIgnoreCase(requester.publicId());
+        if (requester.getRole() != Role.ADMIN && !isOwner) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You don't have permission to do that.");
         }
 
-        if (request.must_have_skills() != null) {
-            job.setMustHaveSkills(request.must_have_skills());
+        if (request.must_have_skills() != null) job.setMustHaveSkills(cleanSkills(request.must_have_skills()));
+        if (request.nice_to_have_skills() != null) job.setNiceToHaveSkills(cleanSkills(request.nice_to_have_skills()));
+        if (request.experience_min_years() != null) job.setExperienceMinYears(request.experience_min_years());
+        if (request.experience_max_years() != null) job.setExperienceMaxYears(request.experience_max_years());
+        if (job.getExperienceMinYears() != null && job.getExperienceMaxYears() != null
+                && job.getExperienceMinYears() > job.getExperienceMaxYears()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Minimum experience can't be more than the maximum.");
         }
-        if (request.nice_to_have_skills() != null) {
-            job.setNiceToHaveSkills(request.nice_to_have_skills());
-        }
-        if (request.experience_min_years() != null) {
-            job.setExperienceMinYears(request.experience_min_years());
-        }
-        if (request.experience_max_years() != null) {
-            job.setExperienceMaxYears(request.experience_max_years());
-        }
-
         jobRepository.save(job);
+    }
+
+    private static List<String> cleanSkills(List<String> raw) {
+        List<String> out = new ArrayList<>();
+        for (String s : raw) {
+            if (s == null) continue;
+            String skill = s.strip().toLowerCase(Locale.ROOT);
+            if (!skill.isEmpty() && !out.contains(skill) && out.size() < 30) out.add(skill);
+        }
+        return out;
     }
 
     private static String guessContentType(String filename) {

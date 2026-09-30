@@ -1,21 +1,23 @@
 package com.smartstaff.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
-/**
- * Async task execution configuration for long-running operations like role profile extraction.
- */
 @Configuration
 @EnableAsync
 public class AsyncExecutorConfig {
 
+    /** app.async.inline=true runs background work on the calling thread —
+     *  used by the integration tests so stubbed calls happen deterministically. */
     @Bean(name = "profileExtractorExecutor")
-    public Executor profileExtractorExecutor() {
+    public Executor profileExtractorExecutor(@Value("${app.async.inline:false}") boolean inline) {
+        if (inline) return new SyncTaskExecutor();
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(5);

@@ -4,6 +4,7 @@ import com.smartstaff.dto.response.CandidateRowResponse;
 import com.smartstaff.dto.response.JdStructResponse;
 import com.smartstaff.dto.response.JobDetailResponse;
 import com.smartstaff.dto.response.JobSummaryResponse;
+import com.smartstaff.dto.response.RoleProfileResponse;
 import com.smartstaff.dto.response.ResumeSummaryResponse;
 import com.smartstaff.entity.Job;
 import com.smartstaff.entity.Resume;
@@ -39,7 +40,7 @@ public class JobMapper {
         );
     }
 
-    public JobDetailResponse toDetailResponse(Job job, List<CandidateRowResponse> candidates) {
+    public JobDetailResponse toDetailResponse(Job job, List<CandidateRowResponse> candidates, RoleProfileResponse roleProfile) {
         JdStructResponse struct = new JdStructResponse(
                 job.getExperienceMinYears(),
                 job.getExperienceMaxYears(),
@@ -59,7 +60,8 @@ public class JobMapper {
                 candidates,
                 List.of(),
                 List.of(),
-                Map.of()
+                Map.of(),
+                roleProfile
         );
     }
 

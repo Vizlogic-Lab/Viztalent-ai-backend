@@ -2,32 +2,22 @@ package com.smartstaff.service;
 
 import com.smartstaff.dto.request.RoleProfileRequest;
 import com.smartstaff.dto.response.RoleProfileResponse;
-import com.smartstaff.entity.JobRoleProfile;
+import com.smartstaff.entity.User;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface RoleProfileService {
 
-    /**
-     * Extract role profile for a job using Gemini, with fallback to rule-based extraction.
-     * Does NOT require the caller to be inside a transaction (runs async).
-     */
+    /** Builds the job's profile with one Gemini call, falling back to rules
+     *  when Gemini is unconfigured or fails. Runs on the profile executor and
+     *  never inside a caller's transaction. An HR-edited profile is kept. */
     void extractRoleProfile(UUID jobId);
 
-    /**
-     * Get the role profile for a job.
-     * @return RoleProfileResponse or throws ApiException 404 if not found
-     */
     RoleProfileResponse getRoleProfile(UUID jobId);
 
-    /**
-     * HR edits a job's role profile. Sets source=HR and edited_by.
-     * Requires admin access (checked by controller).
-     */
-    void updateRoleProfile(UUID jobId, RoleProfileRequest request, UUID editorId);
+    Optional<RoleProfileResponse> findRoleProfile(UUID jobId);
 
-    /**
-     * Get the raw entity (for internal use).
-     */
-    JobRoleProfile getRoleProfileEntity(UUID jobId);
+    /** HR correction: sets source=HR and edited_by. */
+    RoleProfileResponse updateRoleProfile(UUID jobId, RoleProfileRequest request, User editor);
 }

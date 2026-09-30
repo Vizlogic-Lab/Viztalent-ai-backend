@@ -75,6 +75,7 @@ public abstract class IntegrationTestBase {
         registry.add("app.gemini.base-url", STUB::baseUrl);
         registry.add("app.twilio.api-base-url", STUB::baseUrl);
         registry.add("app.storage.dir", STORAGE_DIR::toString);
+        registry.add("app.async.inline", () -> "true");
     }
 
     @Autowired protected MockMvc mvc;
@@ -129,6 +130,12 @@ public abstract class IntegrationTestBase {
 
     protected ResultActions postJsonAs(Account who, String url, Object body) throws Exception {
         return mvc.perform(withAuth(post(url), who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(body)));
+    }
+
+    protected ResultActions putJsonAs(Account who, String url, Object body) throws Exception {
+        return mvc.perform(withAuth(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(url), who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(body)));
     }

@@ -94,8 +94,6 @@ public class JobController {
         return asAttachment(jobService.loadResumeFile(jobId, fileName));
     }
 
-    // ── Role Profile endpoints ──────────────────────────────────────────
-
     @GetMapping("/api/jobs/{id}/role_profile")
     @PreAuthorize("@jobAccess.canAccessJob(#id, authentication)")
     public ResponseEntity<RoleProfileResponse> getRoleProfile(@PathVariable UUID id) {
@@ -103,18 +101,18 @@ public class JobController {
     }
 
     @PutMapping("/api/jobs/{id}/role_profile")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<SimpleResponse> updateRoleProfile(
+    @PreAuthorize("@jobAccess.canAccessJob(#id, authentication)")
+    public ResponseEntity<RoleProfileResponse> updateRoleProfile(
             @PathVariable UUID id,
-            @Valid @RequestBody RoleProfileRequest request,
+            @RequestBody RoleProfileRequest request,
             @AuthenticationPrincipal User editor
     ) {
-        roleProfileService.updateRoleProfile(id, request, editor.getId());
-        return ResponseEntity.ok(SimpleResponse.OK);
+        return ResponseEntity.ok(roleProfileService.updateRoleProfile(id, request, editor));
     }
 
+    /** Edits must/nice skills and the experience range. Re-screening is not triggered. */
     @PutMapping("/api/jobs/{id}/skills")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("@jobAccess.canAccessJob(#id, authentication)")
     public ResponseEntity<SimpleResponse> updateSkills(
             @PathVariable UUID id,
             @Valid @RequestBody SkillsUpdateRequest request,
@@ -123,8 +121,6 @@ public class JobController {
         jobService.updateJobSkills(id, request, editor);
         return ResponseEntity.ok(SimpleResponse.OK);
     }
-
-    // ────────────────────────────────────────────────────────────────────
 
     private ResponseEntity<byte[]> asAttachment(JobService.StoredFile file) {
         return ResponseEntity.ok()

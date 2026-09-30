@@ -7,329 +7,225 @@ import com.smartstaff.dto.request.RoleProfileRequest;
 import com.smartstaff.dto.response.RoleProfileResponse;
 import com.smartstaff.entity.Job;
 import com.smartstaff.entity.JobRoleProfile;
+import com.smartstaff.entity.JobRoleProfile.ProfileSource;
 import com.smartstaff.entity.JobRoleProfile.RoleFamily;
 import com.smartstaff.entity.JobRoleProfile.SeniorityLevel;
-import com.smartstaff.entity.JobRoleProfile.ProfileSource;
+import com.smartstaff.entity.User;
 import com.smartstaff.exception.ApiException;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.repository.JobRoleProfileRepository;
 import com.smartstaff.service.RoleProfileService;
-import com.smartstaff.util.SkillDictionary;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import com.smartstaff.service.SettingsService;
+import com.smartstaff.util.RoleProfileRules;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.*;
 
-/**
- * Role profile extraction and management.
- * Tries Gemini first, falls back to rule-based extraction if Gemini fails.
- */
 @Service
-@Slf4j
 public class RoleProfileServiceImpl implements RoleProfileService {
+
+    private static final Logger log = LoggerFactory.getLogger(RoleProfileServiceImpl.class);
+    private static final int JD_CHARS = 4000;
 
     private final JobRepository jobRepository;
     private final JobRoleProfileRepository roleProfileRepository;
-    private final SkillDictionary skillDictionary;
-    private final ObjectMapper objectMapper;
+    private final SettingsService settingsService;
     private final GeminiClient geminiClient;
+    private final ObjectMapper objectMapper;
+    private final TransactionTemplate newTransaction;
 
-    @Value("${app.gemini.api-key:}")
-    private String geminiApiKey;
-
-    public RoleProfileServiceImpl(
-            JobRepository jobRepository,
-            JobRoleProfileRepository roleProfileRepository,
-            SkillDictionary skillDictionary,
-            ObjectMapper objectMapper,
-            GeminiClient geminiClient) {
+    public RoleProfileServiceImpl(JobRepository jobRepository,
+                                  JobRoleProfileRepository roleProfileRepository,
+                                  SettingsService settingsService,
+                                  GeminiClient geminiClient,
+                                  ObjectMapper objectMapper,
+                                  PlatformTransactionManager transactionManager) {
         this.jobRepository = jobRepository;
         this.roleProfileRepository = roleProfileRepository;
-        this.skillDictionary = skillDictionary;
-        this.objectMapper = objectMapper;
+        this.settingsService = settingsService;
         this.geminiClient = geminiClient;
+        this.objectMapper = objectMapper;
+        this.newTransaction = new TransactionTemplate(transactionManager);
+        // REQUIRES_NEW: when run inline after a commit, the finished upload
+        // transaction is still bound to the thread and would swallow the write.
+        this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
     @Async("profileExtractorExecutor")
-    @Transactional
     public void extractRoleProfile(UUID jobId) {
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
+        Job job = jobRepository.findById(jobId).orElse(null);
+        if (job == null || isHrEdited(roleProfileRepository.findById(jobId).orElse(null))) return;
 
-        // Delete existing profile if any (re-extraction)
-        roleProfileRepository.deleteById(jobId);
-
-        try {
-            // Try Gemini extraction
-            JobRoleProfile profile = extractViaGemini(job);
-            roleProfileRepository.save(profile);
-            log.info("Extracted role profile for job {} via Gemini", jobId);
-        } catch (Exception e) {
-            log.warn("Gemini extraction failed for job {}, using fallback", jobId, e);
+        JobRoleProfile profile = null;
+        String key = settingsService.getGeminiApiKeyOrNull();
+        if (key != null && !key.isBlank()) {
             try {
-                // Fallback: rule-based extraction
-                JobRoleProfile profile = extractViaFallback(job);
-                roleProfileRepository.save(profile);
-                log.info("Extracted role profile for job {} via fallback", jobId);
-            } catch (Exception fallbackError) {
-                log.error("Both Gemini and fallback extraction failed for job {}", jobId, fallbackError);
+                profile = extractViaGemini(job, key);
+            } catch (Exception e) {
+                log.warn("Role profile via Gemini failed for job {}, using rules: {}", jobId, e.toString());
             }
         }
+        if (profile == null) profile = RoleProfileRules.fallback(job);
+
+        JobRoleProfile result = profile;
+        newTransaction.executeWithoutResult(status -> {
+            if (!jobRepository.existsById(jobId)) return;
+            if (isHrEdited(roleProfileRepository.findById(jobId).orElse(null))) return;
+            roleProfileRepository.save(result);
+        });
     }
 
     @Override
     @Transactional(readOnly = true)
     public RoleProfileResponse getRoleProfile(UUID jobId) {
-        JobRoleProfile profile = getRoleProfileEntity(jobId);
-        return mapToResponse(profile);
-    }
-
-    @Override
-    @Transactional
-    public void updateRoleProfile(UUID jobId, RoleProfileRequest request, UUID editorId) {
-        JobRoleProfile profile = getRoleProfileEntity(jobId);
-
-        // Update allowed fields
-        if (request.roleFamily() != null) {
-            profile.setRoleFamily(RoleFamily.valueOf(request.roleFamily()));
-        }
-        if (request.isTechnical() != null) {
-            profile.setIsTechnical(request.isTechnical());
-        }
-        if (request.languages() != null) {
-            profile.setLanguages(request.languages());
-        }
-        if (request.frameworks() != null) {
-            profile.setFrameworks(request.frameworks());
-        }
-        if (request.seniority() != null) {
-            profile.setSeniority(SeniorityLevel.valueOf(request.seniority()));
-        }
-        if (request.skillWeights() != null) {
-            // Validate weights are 1-5
-            validateSkillWeights(request.skillWeights());
-            profile.setSkillWeights(request.skillWeights());
-        }
-
-        profile.setSource(ProfileSource.HR);
-        profile.setEditedBy(editorId);
-        profile.setUpdatedAt(Instant.now());
-
-        roleProfileRepository.save(profile);
+        return findRoleProfile(jobId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                "The role profile for this job is still being prepared — try again in a moment.", "role_profile_pending"));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public JobRoleProfile getRoleProfileEntity(UUID jobId) {
-        return roleProfileRepository.findById(jobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Role profile not found for this job."));
+    public Optional<RoleProfileResponse> findRoleProfile(UUID jobId) {
+        return roleProfileRepository.findById(jobId).map(RoleProfileServiceImpl::toResponse);
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────
+    @Override
+    @Transactional
+    public RoleProfileResponse updateRoleProfile(UUID jobId, RoleProfileRequest req, User editor) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
+        JobRoleProfile profile = roleProfileRepository.findById(jobId).orElseGet(() -> RoleProfileRules.fallback(job));
 
-    private JobRoleProfile extractViaGemini(Job job) throws Exception {
-        if (geminiApiKey.isBlank()) {
-            throw new Exception("Gemini API key not configured");
+        if (req.role_family() != null) {
+            profile.setRoleFamily(parse(RoleFamily.class, req.role_family(), "role_family"));
+            if (req.is_technical() == null) profile.setIsTechnical(profile.getRoleFamily() != RoleFamily.NON_TECHNICAL);
         }
+        if (req.is_technical() != null) profile.setIsTechnical(req.is_technical());
+        if (req.seniority() != null) profile.setSeniority(parse(SeniorityLevel.class, req.seniority(), "seniority"));
+        if (req.languages() != null) profile.setLanguages(RoleProfileRules.normaliseLanguages(req.languages(), true));
+        if (req.frameworks() != null) {
+            profile.setFrameworks(req.frameworks().stream().map(String::trim).filter(f -> !f.isEmpty()).distinct().limit(15).toList());
+        }
+        if (req.skill_weights() != null) profile.setSkillWeights(validatedWeights(req.skill_weights()));
 
-        // Prepare input: job title, skills, experience, first 4000 chars of text
-        String jdText = job.getJdText();
-        if (jdText == null) jdText = "";
-        String jdSummary = jdText.substring(0, Math.min(4000, jdText.length()));
+        profile.setSource(ProfileSource.HR);
+        profile.setEditedBy(editor.getId());
+        profile.setUpdatedAt(Instant.now());
+        return toResponse(roleProfileRepository.save(profile));
+    }
 
-        String allSkills = String.join(", ",
-                job.getMustHaveSkills().stream().limit(20).toList());
+    // ── Gemini ──────────────────────────────────────────────────────────
 
-        String prompt = String.format("""
-                Analyze this job posting and extract the role profile as JSON.
+    private JobRoleProfile extractViaGemini(Job job, String key) throws Exception {
+        String jd = job.getJdText() == null ? "" : job.getJdText();
+        if (jd.length() > JD_CHARS) jd = jd.substring(0, JD_CHARS);
 
-                Job Title: %s
-                Skills Required: %s
-                Experience: %d-%d years
-                Job Description (first 4000 chars): %s
+        String prompt = """
+                Build a role profile for this job so we can write a role-specific skills assessment.
 
-                Return ONLY a valid JSON object (no markdown, no extra text):
-                {
-                  "roleFamily": "BACKEND|FRONTEND|FULLSTACK|DATA|DEVOPS|QA|MOBILE|NON_TECHNICAL",
-                  "isTechnical": boolean,
-                  "languages": ["Python", "Java", ...],
-                  "frameworks": ["Spring", "Django", ...],
-                  "seniority": "JUNIOR|MID|SENIOR|LEAD",
-                  "skillWeights": {"python": 5, "spring": 4, "dms": 5, ...}
-                }
+                Job title: %s
+                Must-have skills: %s
+                Nice-to-have skills: %s
+                Experience: %s
+                Job description (may be truncated):
+                %s
 
                 Rules:
-                - Skill weights must be 1-5 integers
-                - Include ALL skills mentioned (technical and domain-specific like DMS, SFA)
-                - Languages and frameworks can be empty arrays if not mentioned
-                """,
-                job.getTitle(),
-                allSkills,
-                job.getExperienceMinYears() == null ? 0 : job.getExperienceMinYears(),
-                job.getExperienceMaxYears() == null ? 10 : job.getExperienceMaxYears(),
-                jdSummary);
+                - role_family is the closest match; use NON_TECHNICAL for sales, operations, HR and other roles without programming.
+                - languages are programming languages the candidate must write (e.g. java, python, javascript, cpp); empty if none.
+                - skill_weights: every skill the job really needs, including domain skills (e.g. DMS, SFA), \
+                weight 1 (minor) to 5 (critical). Only use skills that appear in the job description or skill lists.
+                """.formatted(job.getTitle(), String.join(", ", job.getMustHaveSkills()),
+                String.join(", ", job.getNiceToHaveSkills()), experience(job), jd);
 
-        // Call Gemini via the shared client
+        Map<String, Object> schema = Map.of(
+                "type", "OBJECT",
+                "properties", Map.of(
+                        "role_family", Map.of("type", "STRING", "enum", names(RoleFamily.values())),
+                        "is_technical", Map.of("type", "BOOLEAN"),
+                        "languages", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
+                        "frameworks", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
+                        "seniority", Map.of("type", "STRING", "enum", names(SeniorityLevel.values())),
+                        "skill_weights", Map.of("type", "ARRAY", "items", Map.of(
+                                "type", "OBJECT",
+                                "properties", Map.of("skill", Map.of("type", "STRING"), "weight", Map.of("type", "INTEGER")),
+                                "required", List.of("skill", "weight")))),
+                "required", List.of("role_family", "is_technical", "languages", "frameworks", "seniority", "skill_weights"));
+
         Map<String, Object> body = Map.of(
-                "contents", List.of(Map.of(
-                        "parts", List.of(Map.of("text", prompt))
-                )),
+                "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
                 "generationConfig", Map.of(
-                        "responseMimeType", "application/json"
-                )
-        );
+                        "responseMimeType", "application/json",
+                        "responseSchema", schema,
+                        "temperature", 0));
 
-        String responseJson = geminiClient.generateContent(geminiApiKey, body);
-        JsonNode response = objectMapper.readTree(responseJson);
-
-        // Extract text from candidates[0].content.parts[0].text
-        JsonNode textNode = response.path("candidates").get(0).path("content").path("parts").get(0).path("text");
-        String profileJson = textNode.asText();
-
-        // Parse the profile JSON
-        JsonNode profileObj = objectMapper.readTree(profileJson);
-
-        JobRoleProfile profile = new JobRoleProfile();
-        profile.setJobId(job.getId());
-
-        // Parse enum fields with validation
-        String roleFamilyStr = profileObj.path("roleFamily").asText("NON_TECHNICAL");
-        profile.setRoleFamily(RoleFamily.valueOf(roleFamilyStr));
-
-        profile.setIsTechnical(profileObj.path("isTechnical").asBoolean(false));
-
-        // Parse arrays
-        List<String> languages = new ArrayList<>();
-        profileObj.path("languages").forEach(lang -> languages.add(lang.asText()));
-        profile.setLanguages(languages);
-
-        List<String> frameworks = new ArrayList<>();
-        profileObj.path("frameworks").forEach(fw -> frameworks.add(fw.asText()));
-        profile.setFrameworks(frameworks);
-
-        // Parse seniority
-        String seniorityStr = profileObj.path("seniority").asText("JUNIOR");
-        profile.setSeniority(SeniorityLevel.valueOf(seniorityStr));
-
-        // Parse skill weights with validation
-        Map<String, Integer> skillWeights = new HashMap<>();
-        profileObj.path("skillWeights").fields().forEachRemaining(entry -> {
-            int w = entry.getValue().asInt(2);
-            // Clamp to 1-5
-            w = Math.max(1, Math.min(5, w));
-            skillWeights.put(entry.getKey(), w);
-        });
-        profile.setSkillWeights(skillWeights);
-
-        profile.setSource(ProfileSource.AI);
-        profile.setExtractedAt(Instant.now());
-        profile.setUpdatedAt(Instant.now());
-
-        return profile;
+        JsonNode root = objectMapper.readTree(geminiClient.generateContent(key, body));
+        String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("");
+        return RoleProfileRules.fromGemini(objectMapper.readTree(text), job);
     }
 
-    private JobRoleProfile extractViaFallback(Job job) {
-        List<String> allSkills = new ArrayList<>(job.getMustHaveSkills());
-        allSkills.addAll(job.getNiceToHaveSkills());
+    // ── helpers ─────────────────────────────────────────────────────────
 
-        // Rule table: skill -> (role_family, weight)
-        Map<String, Integer> skillWeights = new HashMap<>();
-        RoleFamily detectedRole = RoleFamily.NON_TECHNICAL;
-        boolean isTechnical = !allSkills.isEmpty();
+    private static boolean isHrEdited(JobRoleProfile profile) {
+        return profile != null && profile.getSource() == ProfileSource.HR;
+    }
 
-        for (String skill : allSkills) {
-            String lower = skill.toLowerCase();
+    private static String experience(Job job) {
+        Integer min = job.getExperienceMinYears();
+        Integer max = job.getExperienceMaxYears();
+        if (min == null && max == null) return "not stated";
+        if (max == null) return min + "+ years";
+        return (min == null ? 0 : min) + "-" + max + " years";
+    }
 
-            // Backend
-            if (lower.contains("java") || lower.contains("spring") || lower.contains("python")
-                    || lower.contains("node") || lower.contains("golang") || lower.contains("rust")) {
-                skillWeights.putIfAbsent(skill, 4);
-                if (detectedRole == RoleFamily.NON_TECHNICAL) {
-                    detectedRole = RoleFamily.BACKEND;
-                }
-            }
-            // Frontend
-            if (lower.contains("react") || lower.contains("vue") || lower.contains("angular")
-                    || lower.contains("typescript") || lower.contains("css")) {
-                skillWeights.putIfAbsent(skill, 4);
-                if (detectedRole == RoleFamily.BACKEND) {
-                    detectedRole = RoleFamily.FULLSTACK;
-                } else {
-                    detectedRole = RoleFamily.FRONTEND;
-                }
-            }
-            // Data
-            if (lower.contains("sql") || lower.contains("spark") || lower.contains("pandas")
-                    || lower.contains("analytics") || lower.contains("warehouse")) {
-                skillWeights.putIfAbsent(skill, 4);
-                detectedRole = RoleFamily.DATA;
-            }
-            // DevOps
-            if (lower.contains("docker") || lower.contains("kubernetes") || lower.contains("aws")
-                    || lower.contains("terraform") || lower.contains("ci/cd")) {
-                skillWeights.putIfAbsent(skill, 4);
-                detectedRole = RoleFamily.DEVOPS;
-            }
-            // QA
-            if (lower.contains("test") || lower.contains("selenium") || lower.contains("cypress")
-                    || lower.contains("automation")) {
-                skillWeights.putIfAbsent(skill, 4);
-                detectedRole = RoleFamily.QA;
-            }
+    private static List<String> names(Enum<?>[] values) {
+        return Arrays.stream(values).map(Enum::name).toList();
+    }
 
-            // Default weight for other skills
-            skillWeights.putIfAbsent(skill, 2);
+    private static <E extends Enum<E>> E parse(Class<E> type, String value, String field) {
+        try {
+            return RoleProfileRules.parseEnum(type, value, field);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unknown " + field + ": " + value + ".", "invalid_" + field);
         }
-
-        // Clamp weights to 1-5
-        skillWeights.replaceAll((k, v) -> Math.max(1, Math.min(5, v)));
-
-        // Detect seniority from experience
-        Integer minYears = job.getExperienceMinYears() == null ? 0 : job.getExperienceMinYears();
-        SeniorityLevel seniority = minYears >= 10 ? SeniorityLevel.LEAD
-                : minYears >= 5 ? SeniorityLevel.SENIOR
-                : minYears >= 2 ? SeniorityLevel.MID
-                : SeniorityLevel.JUNIOR;
-
-        JobRoleProfile profile = new JobRoleProfile();
-        profile.setJobId(job.getId());
-        profile.setRoleFamily(detectedRole);
-        profile.setIsTechnical(isTechnical);
-        profile.setLanguages(List.of("Python", "Java", "TypeScript")); // Defaults; can refine
-        profile.setFrameworks(List.of()); // Empty for fallback
-        profile.setSeniority(seniority);
-        profile.setSkillWeights(skillWeights);
-        profile.setSource(ProfileSource.AI_FALLBACK);
-        profile.setExtractedAt(Instant.now());
-        profile.setUpdatedAt(Instant.now());
-
-        return profile;
     }
 
-    private void validateSkillWeights(Map<String, Integer> weights) {
-        for (Map.Entry<String, Integer> entry : weights.entrySet()) {
-            if (entry.getValue() < 1 || entry.getValue() > 5) {
+    private static Map<String, Integer> validatedWeights(Map<String, Integer> weights) {
+        if (weights.size() > RoleProfileRules.MAX_SKILLS) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "At most " + RoleProfileRules.MAX_SKILLS + " skills can be weighted.", "invalid_skill_weights");
+        }
+        Map<String, Integer> out = new LinkedHashMap<>();
+        weights.forEach((skill, weight) -> {
+            String key = skill == null ? "" : skill.toLowerCase(Locale.ROOT).trim();
+            if (key.isEmpty() || weight == null || weight < 1 || weight > 5) {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
-                        "Skill weights must be between 1 and 5. Invalid: " + entry.getKey());
+                        "Each skill needs a name and a weight from 1 to 5.", "invalid_skill_weights");
             }
-        }
+            out.put(key, weight);
+        });
+        return out;
     }
 
-    private RoleProfileResponse mapToResponse(JobRoleProfile profile) {
+    private static RoleProfileResponse toResponse(JobRoleProfile p) {
         return new RoleProfileResponse(
-                profile.getRoleFamily().name(),
-                profile.getIsTechnical(),
-                profile.getLanguages(),
-                profile.getFrameworks(),
-                profile.getSeniority().name(),
-                profile.getSkillWeights(),
-                profile.getSource().name()
-        );
+                p.getRoleFamily().name(),
+                Boolean.TRUE.equals(p.getIsTechnical()),
+                p.getLanguages() == null ? List.of() : p.getLanguages(),
+                p.getFrameworks() == null ? List.of() : p.getFrameworks(),
+                p.getSeniority().name(),
+                p.getSkillWeights() == null ? Map.of() : p.getSkillWeights(),
+                p.getSource().name(),
+                p.getEditedBy() == null ? null : p.getEditedBy().toString(),
+                p.getUpdatedAt());
     }
 }

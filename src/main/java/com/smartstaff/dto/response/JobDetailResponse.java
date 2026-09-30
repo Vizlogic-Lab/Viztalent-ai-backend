@@ -23,5 +23,6 @@ public record JobDetailResponse(
         List<CandidateRowResponse> candidates,
         List<Object> submissions,
         List<Object> interviews,
-        Map<String, String> assessment_urls
+        Map<String, String> assessment_urls,
+        RoleProfileResponse role_profile
 ) {}
