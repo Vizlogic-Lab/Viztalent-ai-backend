@@ -8,9 +8,9 @@ import java.util.UUID;
 
 public interface AssessmentService {
 
-    /** Submissions are still Phase 6 scope beyond generation itself — this
-     *  backend has no candidate-facing assessment-taking page to submit
-     *  from (see docs/FEATURES.md), so this always reports zero. */
+    /** The candidates who have taken (or are taking) this job's assessment.
+     *  Scores land in F9; each row reports status and how many questions were
+     *  answered, not a mark. */
     AssessmentSubmissionsResponse submissions(UUID jobId);
 
     AssessmentStatusResponse status(UUID jobId);

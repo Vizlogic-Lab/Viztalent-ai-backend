@@ -38,6 +38,8 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final JobRepository jobRepository;
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionRepository assessmentQuestionRepository;
+    private final AssessmentAttemptRepository assessmentAttemptRepository;
+    private final AssessmentAnswerRepository assessmentAnswerRepository;
     private final QuestionBankItemRepository questionBankItemRepository;
     private final JobRoleProfileRepository roleProfileRepository;
     private final SettingsService settingsService;
@@ -49,6 +51,8 @@ public class AssessmentServiceImpl implements AssessmentService {
     public AssessmentServiceImpl(JobRepository jobRepository,
                                   AssessmentRepository assessmentRepository,
                                   AssessmentQuestionRepository assessmentQuestionRepository,
+                                  AssessmentAttemptRepository assessmentAttemptRepository,
+                                  AssessmentAnswerRepository assessmentAnswerRepository,
                                   QuestionBankItemRepository questionBankItemRepository,
                                   JobRoleProfileRepository roleProfileRepository,
                                   SettingsService settingsService,
@@ -59,6 +63,8 @@ public class AssessmentServiceImpl implements AssessmentService {
         this.jobRepository = jobRepository;
         this.assessmentRepository = assessmentRepository;
         this.assessmentQuestionRepository = assessmentQuestionRepository;
+        this.assessmentAttemptRepository = assessmentAttemptRepository;
+        this.assessmentAnswerRepository = assessmentAnswerRepository;
         this.questionBankItemRepository = questionBankItemRepository;
         this.roleProfileRepository = roleProfileRepository;
         this.settingsService = settingsService;
@@ -69,8 +75,29 @@ public class AssessmentServiceImpl implements AssessmentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public AssessmentSubmissionsResponse submissions(UUID jobId) {
-        return AssessmentSubmissionsResponse.empty();
+        List<AssessmentSubmissionsResponse.SubmissionSummary> rows = new ArrayList<>();
+        for (AssessmentAttempt a : assessmentAttemptRepository.findByJobIdOrderByStartedAtDesc(jobId)) {
+            int numQuestions = 0;
+            for (String level : a.getLevels()) {
+                numQuestions += (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getAssessment().getId(), level);
+            }
+            rows.add(new AssessmentSubmissionsResponse.SubmissionSummary(
+                    a.getId().toString(),
+                    a.getCandidateEmail(),
+                    a.getCandidateName(),
+                    a.getLevels(),
+                    a.isCombined(),
+                    a.getStatus().name(),
+                    (int) assessmentAnswerRepository.findByAttemptId(a.getId()).size(),
+                    numQuestions,
+                    a.getStartedAt(),
+                    a.getSubmittedAt(),
+                    a.isAutoSubmitted(),
+                    a.getAssessment().getVersion()));
+        }
+        return new AssessmentSubmissionsResponse(true, rows, 50);
     }
 
     @Override

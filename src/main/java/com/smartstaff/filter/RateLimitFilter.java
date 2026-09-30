@@ -19,8 +19,9 @@ import java.io.IOException;
  *
  *  - "auth"  — POST /api/auth/login and /api/auth/signup (password guessing,
  *              signup spam); shared counter.
- *  - "token" — GET /api/interview/by_token/** and POST .../save_by_token/**
- *              (invite-token guessing).
+ *  - "token" — the invite-token endpoints of the interview and assessment
+ *              candidate flows (by_token / save_by_token / submit_by_token /
+ *              run_by_token), to slow invite-token guessing.
  *
  *  Twilio's webhooks aren't limited here — they're already gated by request
  *  signature, and a single call legitimately produces a burst of them.
@@ -95,7 +96,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return "auth";
         }
         if (("GET".equals(method) && path.startsWith("/api/interview/by_token/"))
-                || ("POST".equals(method) && path.startsWith("/api/interview/save_by_token/"))) {
+                || ("POST".equals(method) && path.startsWith("/api/interview/save_by_token/"))
+                || ("GET".equals(method) && path.startsWith("/api/assessment/by_token/"))
+                || ("POST".equals(method) && (path.startsWith("/api/assessment/save_by_token/")
+                        || path.startsWith("/api/assessment/submit_by_token/")
+                        || path.startsWith("/api/assessment/run_by_token/")))) {
             return "token";
         }
         return null;

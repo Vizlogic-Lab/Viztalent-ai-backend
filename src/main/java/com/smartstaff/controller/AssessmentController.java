@@ -1,12 +1,12 @@
 package com.smartstaff.controller;
 
 import com.smartstaff.dto.request.AssessmentGenerateRequest;
-import com.smartstaff.dto.response.AnswerKeyResponse;
-import com.smartstaff.dto.response.AssessmentGenerateResponse;
-import com.smartstaff.dto.response.AssessmentStatusResponse;
-import com.smartstaff.dto.response.AssessmentSubmissionsResponse;
+import com.smartstaff.dto.request.AssessmentRunRequest;
+import com.smartstaff.dto.request.AssessmentSaveRequest;
+import com.smartstaff.dto.response.*;
 import com.smartstaff.entity.User;
 import com.smartstaff.service.AssessmentService;
+import com.smartstaff.service.CandidateAssessmentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,9 +19,12 @@ import java.util.UUID;
 public class AssessmentController {
 
     private final AssessmentService assessmentService;
+    private final CandidateAssessmentService candidateAssessmentService;
 
-    public AssessmentController(AssessmentService assessmentService) {
+    public AssessmentController(AssessmentService assessmentService,
+                                CandidateAssessmentService candidateAssessmentService) {
         this.assessmentService = assessmentService;
+        this.candidateAssessmentService = candidateAssessmentService;
     }
 
     @GetMapping("/api/assessment/submissions/{jobId}")
@@ -47,5 +50,30 @@ public class AssessmentController {
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
     public ResponseEntity<AnswerKeyResponse> answerKey(@PathVariable UUID jobId) {
         return ResponseEntity.ok(assessmentService.answerKey(jobId));
+    }
+
+    // ── Public, token-based (candidate-facing) ──────────────────────────
+
+    @GetMapping("/api/assessment/by_token/{token}")
+    public ResponseEntity<CandidateAssessmentResponse> byToken(@PathVariable String token) {
+        return ResponseEntity.ok(candidateAssessmentService.byToken(token));
+    }
+
+    @PostMapping("/api/assessment/save_by_token/{token}")
+    public ResponseEntity<CandidateAssessmentResponse> saveByToken(@PathVariable String token,
+                                                                    @Valid @RequestBody AssessmentSaveRequest req) {
+        return ResponseEntity.ok(candidateAssessmentService.save(token, req));
+    }
+
+    @PostMapping("/api/assessment/submit_by_token/{token}")
+    public ResponseEntity<CandidateAssessmentResponse> submitByToken(@PathVariable String token,
+                                                                      @Valid @RequestBody AssessmentSaveRequest req) {
+        return ResponseEntity.ok(candidateAssessmentService.submit(token, req));
+    }
+
+    @PostMapping("/api/assessment/run_by_token/{token}")
+    public ResponseEntity<AssessmentRunResponse> runByToken(@PathVariable String token,
+                                                             @Valid @RequestBody AssessmentRunRequest req) {
+        return ResponseEntity.ok(candidateAssessmentService.run(token, req));
     }
 }

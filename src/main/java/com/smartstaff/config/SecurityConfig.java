@@ -78,6 +78,9 @@ public class SecurityConfig {
                         // interview endpoints (the token itself is the credential).
                         .requestMatchers("/api/auth/login", "/api/auth/signup").permitAll()
                         .requestMatchers("/api/interview/by_token/**", "/api/interview/save_by_token/**").permitAll()
+                        // Candidate assessment-taking flow (the invite token is the credential).
+                        .requestMatchers("/api/assessment/by_token/**", "/api/assessment/save_by_token/**",
+                                "/api/assessment/submit_by_token/**", "/api/assessment/run_by_token/**").permitAll()
                         // Public: Twilio's own webhooks (no bearer token — Twilio can't send
                         // one). Gated instead by X-Twilio-Signature — see TwilioWebhookController.
                         .requestMatchers("/api/interview/twiml/**").permitAll()
