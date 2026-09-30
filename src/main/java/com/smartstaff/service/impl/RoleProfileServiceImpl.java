@@ -2,6 +2,7 @@ package com.smartstaff.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartstaff.client.GeminiClient;
 import com.smartstaff.dto.request.RoleProfileRequest;
 import com.smartstaff.dto.response.RoleProfileResponse;
 import com.smartstaff.entity.Job;
@@ -20,11 +21,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Role profile extraction and management.
@@ -38,7 +37,7 @@ public class RoleProfileServiceImpl implements RoleProfileService {
     private final JobRoleProfileRepository roleProfileRepository;
     private final SkillDictionary skillDictionary;
     private final ObjectMapper objectMapper;
-    private final RestTemplate restTemplate;
+    private final GeminiClient geminiClient;
 
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
@@ -48,12 +47,12 @@ public class RoleProfileServiceImpl implements RoleProfileService {
             JobRoleProfileRepository roleProfileRepository,
             SkillDictionary skillDictionary,
             ObjectMapper objectMapper,
-            RestTemplate restTemplate) {
+            GeminiClient geminiClient) {
         this.jobRepository = jobRepository;
         this.roleProfileRepository = roleProfileRepository;
         this.skillDictionary = skillDictionary;
         this.objectMapper = objectMapper;
-        this.restTemplate = restTemplate;
+        this.geminiClient = geminiClient;
     }
 
     @Override
@@ -148,24 +147,27 @@ public class RoleProfileServiceImpl implements RoleProfileService {
                 job.getMustHaveSkills().stream().limit(20).toList());
 
         String prompt = String.format("""
-                Analyze this job posting and extract the role profile.
+                Analyze this job posting and extract the role profile as JSON.
 
                 Job Title: %s
                 Skills Required: %s
                 Experience: %d-%d years
                 Job Description (first 4000 chars): %s
 
-                Return a JSON object with:
+                Return ONLY a valid JSON object (no markdown, no extra text):
                 {
                   "roleFamily": "BACKEND|FRONTEND|FULLSTACK|DATA|DEVOPS|QA|MOBILE|NON_TECHNICAL",
                   "isTechnical": boolean,
                   "languages": ["Python", "Java", ...],
                   "frameworks": ["Spring", "Django", ...],
                   "seniority": "JUNIOR|MID|SENIOR|LEAD",
-                  "skillWeights": {"python": 5, "spring": 4, ...}
+                  "skillWeights": {"python": 5, "spring": 4, "dms": 5, ...}
                 }
 
-                Skill weights must be 1-5. Only include skills that appear in the job description.
+                Rules:
+                - Skill weights must be 1-5 integers
+                - Include ALL skills mentioned (technical and domain-specific like DMS, SFA)
+                - Languages and frameworks can be empty arrays if not mentioned
                 """,
                 job.getTitle(),
                 allSkills,
@@ -173,11 +175,63 @@ public class RoleProfileServiceImpl implements RoleProfileService {
                 job.getExperienceMaxYears() == null ? 10 : job.getExperienceMaxYears(),
                 jdSummary);
 
-        // Call Gemini (via your existing GeminiClient)
-        // For now, mock this as it requires actual Gemini integration
-        // In real implementation, use: geminiClient.generateContent(prompt, ...)
+        // Call Gemini via the shared client
+        Map<String, Object> body = Map.of(
+                "contents", List.of(Map.of(
+                        "parts", List.of(Map.of("text", prompt))
+                )),
+                "generationConfig", Map.of(
+                        "responseMimeType", "application/json"
+                )
+        );
 
-        throw new UnsupportedOperationException("Gemini integration deferred; use fallback");
+        String responseJson = geminiClient.generateContent(geminiApiKey, body);
+        JsonNode response = objectMapper.readTree(responseJson);
+
+        // Extract text from candidates[0].content.parts[0].text
+        JsonNode textNode = response.path("candidates").get(0).path("content").path("parts").get(0).path("text");
+        String profileJson = textNode.asText();
+
+        // Parse the profile JSON
+        JsonNode profileObj = objectMapper.readTree(profileJson);
+
+        JobRoleProfile profile = new JobRoleProfile();
+        profile.setJobId(job.getId());
+
+        // Parse enum fields with validation
+        String roleFamilyStr = profileObj.path("roleFamily").asText("NON_TECHNICAL");
+        profile.setRoleFamily(RoleFamily.valueOf(roleFamilyStr));
+
+        profile.setIsTechnical(profileObj.path("isTechnical").asBoolean(false));
+
+        // Parse arrays
+        List<String> languages = new ArrayList<>();
+        profileObj.path("languages").forEach(lang -> languages.add(lang.asText()));
+        profile.setLanguages(languages);
+
+        List<String> frameworks = new ArrayList<>();
+        profileObj.path("frameworks").forEach(fw -> frameworks.add(fw.asText()));
+        profile.setFrameworks(frameworks);
+
+        // Parse seniority
+        String seniorityStr = profileObj.path("seniority").asText("JUNIOR");
+        profile.setSeniority(SeniorityLevel.valueOf(seniorityStr));
+
+        // Parse skill weights with validation
+        Map<String, Integer> skillWeights = new HashMap<>();
+        profileObj.path("skillWeights").fields().forEachRemaining(entry -> {
+            int w = entry.getValue().asInt(2);
+            // Clamp to 1-5
+            w = Math.max(1, Math.min(5, w));
+            skillWeights.put(entry.getKey(), w);
+        });
+        profile.setSkillWeights(skillWeights);
+
+        profile.setSource(ProfileSource.AI);
+        profile.setExtractedAt(Instant.now());
+        profile.setUpdatedAt(Instant.now());
+
+        return profile;
     }
 
     private JobRoleProfile extractViaFallback(Job job) {
