@@ -49,6 +49,9 @@ public interface SettingsService {
      *  to validate the X-Twilio-Signature on inbound webhooks. Null if not configured. */
     String getTwilioAuthTokenOrNull();
 
+    /** Piston API base (e.g. http://piston:2000/api/v2), or null if not set. */
+    String getPistonUrlOrNull();
+
     /** Calling-code prefixes place_call may dial, e.g. ["+91"] (setting twilio_allowed_country_codes). */
     java.util.List<String> getTwilioAllowedCountryCodes();
 }

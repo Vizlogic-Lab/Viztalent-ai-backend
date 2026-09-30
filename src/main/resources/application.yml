@@ -51,6 +51,11 @@ app:
     trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
     auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
     token-per-minute: ${RATE_LIMIT_TOKEN_PER_MINUTE:30}
+  # Code runner (self-hosted Piston; its URL is saved in Settings).
+  runner:
+    max-concurrency: ${RUNNER_MAX_CONCURRENCY:8}
+    queue-wait-ms: ${RUNNER_QUEUE_WAIT_MS:30000}
+    runtimes-cache-ms: 300000
 
 # Only health is exposed, and without component details, so /actuator/health
 # is safe to leave public for load balancers / uptime checks.

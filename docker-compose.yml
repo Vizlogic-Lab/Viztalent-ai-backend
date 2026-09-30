@@ -48,6 +48,39 @@ services:
     # Storage for uploaded files (JDs, resumes)
     volumes:
       - ./storage:/app/storage
+    # "runner" reaches Piston; "default" reaches Postgres and the outside world.
+    networks:
+      - default
+      - runner
+
+  # Code runner for candidate code. Not published on any host port and only on
+  # the internal "runner" network, so only the app can reach it and the
+  # sandbox has no internet. Save http://piston:2000/api/v2 as the Piston URL
+  # in Settings, then install languages with scripts/install-runtimes.sh.
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: backend-classic-piston
+    privileged: true   # required by Piston's isolate sandbox
+    environment:
+      PISTON_DISABLE_NETWORKING: "true"
+      PISTON_RUN_TIMEOUT: "3000"
+      PISTON_RUN_CPU_TIME: "3000"
+      PISTON_COMPILE_TIMEOUT: "10000"
+      PISTON_RUN_MEMORY_LIMIT: "268435456"   # 256 MB
+      PISTON_OUTPUT_MAX_SIZE: "65536"        # 64 KB per stream
+      PISTON_MAX_PROCESS_COUNT: "64"
+    tmpfs:
+      - /tmp:exec
+    volumes:
+      - piston_packages:/piston/packages
+    networks:
+      - runner
+    restart: unless-stopped
+
+networks:
+  runner:
+    internal: true
 
 volumes:
   backend_classic_pg_data:
+  piston_packages:

@@ -268,6 +268,11 @@ public class SettingsServiceImpl implements SettingsService {
     }
 
     @Override
+    public String getPistonUrlOrNull() {
+        return plain(KEY_PISTON_URL).orElse(null);
+    }
+
+    @Override
     public List<String> getTwilioAllowedCountryCodes() {
         return parseCountryCodes(plain(KEY_TWILIO_ALLOWED_CC).orElse(DEFAULT_ALLOWED_CC));
     }

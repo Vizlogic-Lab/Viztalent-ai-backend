@@ -76,6 +76,7 @@ public abstract class IntegrationTestBase {
         registry.add("app.twilio.api-base-url", STUB::baseUrl);
         registry.add("app.storage.dir", STORAGE_DIR::toString);
         registry.add("app.async.inline", () -> "true");
+        registry.add("app.runner.runtimes-cache-ms", () -> "0");
     }
 
     @Autowired protected MockMvc mvc;

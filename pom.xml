@@ -22,6 +22,9 @@
     <!-- Newer than the 1.19.8 Spring Boot 3.3.5 manages: Docker Engine 29 raised its
          minimum API version, which the older docker-java inside 1.19.x can't speak. -->
     <testcontainers.version>1.21.4</testcontainers.version>
+    <!-- Tests tagged "piston" need a real Piston container with runtimes
+         downloaded; run them with: mvn test -Dgroups=piston -DexcludedGroups= -->
+    <excludedGroups>piston</excludedGroups>
   </properties>
 
   <dependencies>

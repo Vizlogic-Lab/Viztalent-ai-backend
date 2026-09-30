@@ -87,4 +87,56 @@ public final class Fixtures {
             throw new IllegalStateException(e);
         }
     }
+
+    // ── Piston ──────────────────────────────────────────────────────────
+
+    /** GET /api/v2/runtimes: two pythons (latest should win) and node + deno for javascript. */
+    public static String pistonRuntimes() {
+        return """
+                [{"language":"java","version":"15.0.2","aliases":[]},
+                 {"language":"python","version":"3.10.0","aliases":["py","py3","python3"]},
+                 {"language":"python","version":"3.12.0","aliases":["py","py3","python3"]},
+                 {"language":"javascript","version":"18.15.0","aliases":["node-javascript","node-js","javascript","js"],"runtime":"node"},
+                 {"language":"javascript","version":"1.32.3","aliases":["deno-js"],"runtime":"deno"},
+                 {"language":"c++","version":"10.2.0","aliases":["cpp","g++"],"runtime":"gcc"}]
+                """;
+    }
+
+    /** POST /api/v2/execute response for a run that finished normally. */
+    public static String pistonRun(String stdout) {
+        return pistonRun(stdout, "", 0, null, null);
+    }
+
+    public static String pistonRun(String stdout, String stderr, Integer code, String signal, String status) {
+        ObjectNode root = JSON.createObjectNode();
+        root.put("language", "python");
+        root.put("version", "3.12.0");
+        ObjectNode run = root.putObject("run");
+        run.put("stdout", stdout);
+        run.put("stderr", stderr);
+        run.put("output", stdout + stderr);
+        if (code == null) run.putNull("code"); else run.put("code", code);
+        if (signal == null) run.putNull("signal"); else run.put("signal", signal);
+        if (status == null) run.putNull("status"); else run.put("status", status);
+        run.putNull("message");
+        run.put("cpu_time", 12);
+        run.put("wall_time", 37);
+        run.put("memory", 8_192_000);
+        return root.toString();
+    }
+
+    /** Compile stage failed, so Piston returns no run stage at all. */
+    public static String pistonCompileError(String stderr) {
+        ObjectNode root = JSON.createObjectNode();
+        root.put("language", "java");
+        root.put("version", "15.0.2");
+        ObjectNode compile = root.putObject("compile");
+        compile.put("stdout", "");
+        compile.put("stderr", stderr);
+        compile.put("output", stderr);
+        compile.put("code", 1);
+        compile.putNull("signal");
+        compile.putNull("status");
+        return root.toString();
+    }
 }
