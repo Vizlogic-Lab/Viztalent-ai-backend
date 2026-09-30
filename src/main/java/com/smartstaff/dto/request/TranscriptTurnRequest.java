@@ -1,8 +1,7 @@
 package com.smartstaff.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-
-/** One entry of the `transcript` array InterviewRoom.jsx / CandidateInterview.jsx
- *  post to save / save_by_token. `answer` is deliberately not @NotBlank — an
- *  unanswered question is still a valid (if incomplete) transcript entry. */
-public record TranscriptTurnRequest(String category, String skill, @NotBlank String question, String answer) {}
+/** One answer in the `transcript` array posted to save / save_by_token.
+ *  Answers are matched to the stored interview_turns by `seq` (or by array
+ *  position when seq is absent); category, skill and question are accepted
+ *  for compatibility but ignored, so a client can't rewrite the questions. */
+public record TranscriptTurnRequest(Integer seq, String category, String skill, String question, String answer) {}

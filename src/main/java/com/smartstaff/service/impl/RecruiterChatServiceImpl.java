@@ -8,11 +8,13 @@ import com.smartstaff.dto.request.UniversalExecuteRequest;
 import com.smartstaff.dto.response.RunScreeningResponse;
 import com.smartstaff.entity.User;
 import com.smartstaff.exception.ApiException;
+import com.smartstaff.filter.RateLimiter;
 import com.smartstaff.service.RecruiterChatService;
 import com.smartstaff.service.ScreeningService;
 import com.smartstaff.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -39,11 +41,14 @@ public class RecruiterChatServiceImpl implements RecruiterChatService {
     private static final Logger log = LoggerFactory.getLogger(RecruiterChatServiceImpl.class);
     private static final String PROCESS_RESUMES_TOOL = "PROCESS_RESUMES";
     private static final String DEFAULT_PERSONA = "You are a helpful recruiting assistant.";
+    static final int MAX_PERSONA_CHARS = 500;
+    static final int GEMINI_CALLS_PER_MINUTE = 30;
 
     private final ScreeningService screeningService;
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final GeminiClient geminiClient;
+    private final RateLimiter geminiLimiter = new RateLimiter();
 
     public RecruiterChatServiceImpl(ScreeningService screeningService, SettingsService settingsService,
                                      ObjectMapper objectMapper, GeminiClient geminiClient) {
@@ -58,6 +63,12 @@ public class RecruiterChatServiceImpl implements RecruiterChatService {
         String key = settingsService.getGeminiApiKeyOrNull();
         if (key == null || key.isBlank()) {
             return reply("I don't have a Gemini API key configured yet — add one in Settings so I can help.");
+        }
+
+        long retryAfter = geminiLimiter.tryAcquire("gemini:" + requester.getId(), GEMINI_CALLS_PER_MINUTE, 60_000);
+        if (retryAfter > 0) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many assistant requests — try again in " + retryAfter + " seconds.", "rate_limited");
         }
 
         GeminiOutcome outcome;
@@ -102,8 +113,10 @@ public class RecruiterChatServiceImpl implements RecruiterChatService {
         }
 
         String persona = req.platform_config() != null && req.platform_config().persona() != null
+                && !req.platform_config().persona().isBlank()
                 ? req.platform_config().persona()
                 : DEFAULT_PERSONA;
+        if (persona.length() > MAX_PERSONA_CHARS) persona = persona.substring(0, MAX_PERSONA_CHARS);
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("system_instruction", Map.of("parts", List.of(Map.of("text", persona))));

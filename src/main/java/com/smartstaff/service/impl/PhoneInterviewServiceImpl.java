@@ -57,6 +57,7 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
     private static final Logger log = LoggerFactory.getLogger(PhoneInterviewServiceImpl.class);
     private static final Set<String> TERMINAL_STATUSES = Set.of("completed", "busy", "failed", "no-answer", "canceled");
     private static final String GATHER_TIMEOUT_SECONDS = "8";
+    private static final java.util.regex.Pattern E164 = java.util.regex.Pattern.compile("^\\+[1-9]\\d{7,14}$");
 
     private final InterviewRepository interviewRepository;
     private final InterviewTurnRepository interviewTurnRepository;
@@ -89,6 +90,17 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
         if (interview == null) {
             return PlaceCallResponse.error("Interview not found — call /api/interview/prepare first.");
         }
+        if ("COMPLETED".equals(interview.getStatus())) {
+            return PlaceCallResponse.error("This interview is already completed.");
+        }
+        String phone = req.phone().replaceAll("[\\s-]", "");
+        if (!E164.matcher(phone).matches()) {
+            return PlaceCallResponse.error("Enter the phone number in international format, e.g. +919876543210.");
+        }
+        List<String> allowed = settingsService.getTwilioAllowedCountryCodes();
+        if (allowed.stream().noneMatch(phone::startsWith)) {
+            return PlaceCallResponse.error("Calls to this country code aren't allowed. Allowed: " + String.join(", ", allowed) + ".");
+        }
 
         String sid = settingsService.getTwilioAccountSidOrNull();
         String token = settingsService.getTwilioAuthTokenOrNull();
@@ -102,7 +114,7 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
         String statusUrl = base + "/api/interview/twiml/status";
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("To", req.phone());
+        form.add("To", phone);
         form.add("From", from);
         form.add("Url", voiceUrl);
         form.add("StatusCallback", statusUrl);

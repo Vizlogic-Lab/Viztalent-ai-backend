@@ -8,6 +8,7 @@ import com.smartstaff.entity.User;
 import com.smartstaff.service.JobService;
 import com.smartstaff.service.RoleProfileService;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -81,11 +83,13 @@ public class JobController {
     }
 
     @GetMapping("/api/jd/{id}/download")
+    @PreAuthorize("@jobAccess.canAccessJob(#id, authentication)")
     public ResponseEntity<byte[]> downloadJd(@PathVariable UUID id) {
         return asAttachment(jobService.loadJdFile(id));
     }
 
     @GetMapping("/api/resumes/{jobId}/download/{fileName}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
     public ResponseEntity<byte[]> downloadResume(@PathVariable UUID jobId, @PathVariable String fileName) {
         return asAttachment(jobService.loadResumeFile(jobId, fileName));
     }
@@ -125,7 +129,8 @@ public class JobController {
     private ResponseEntity<byte[]> asAttachment(JobService.StoredFile file) {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.contentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.filename() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.filename(), StandardCharsets.UTF_8).build().toString())
                 .body(file.bytes());
     }
 }

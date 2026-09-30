@@ -1,7 +1,6 @@
 package com.smartstaff.exception;
 
 import com.smartstaff.dto.response.ApiErrorResponse;
-import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -65,12 +64,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex) {
         log.error("Unhandled error", ex);
-        String requestId = request.getHeader("X-Request-Id");
+        String requestId = org.slf4j.MDC.get(com.smartstaff.filter.RequestIdFilter.MDC_KEY);
         String message = requestId != null
                 ? "Something went wrong (ref " + requestId + ")"
-                : "Something went wrong. Please contact support.";
+                : "Something went wrong.";
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiErrorResponse.of(message));
     }

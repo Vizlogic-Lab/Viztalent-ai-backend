@@ -6,4 +6,5 @@ package com.smartstaff.dto.request;
  *  clear." We instead treat blank as "leave unchanged" (simpler and safer:
  *  a recruiter clearing just the SID field shouldn't wipe a working token),
  *  and clearing all three intentionally blanks the whole config. */
-public record TwilioConfigRequest(String account_sid, String auth_token, String from_number, boolean persist) {}
+public record TwilioConfigRequest(String account_sid, String auth_token, String from_number, boolean persist,
+                                  String allowed_country_codes) {}

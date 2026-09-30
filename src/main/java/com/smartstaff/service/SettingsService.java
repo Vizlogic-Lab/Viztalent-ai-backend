@@ -48,4 +48,7 @@ public interface SettingsService {
     /** Decrypted Twilio auth token — used both to call Twilio's REST API and
      *  to validate the X-Twilio-Signature on inbound webhooks. Null if not configured. */
     String getTwilioAuthTokenOrNull();
+
+    /** Calling-code prefixes place_call may dial, e.g. ["+91"] (setting twilio_allowed_country_codes). */
+    java.util.List<String> getTwilioAllowedCountryCodes();
 }

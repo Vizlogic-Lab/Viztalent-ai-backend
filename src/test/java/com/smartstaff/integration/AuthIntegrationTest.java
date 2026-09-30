@@ -83,7 +83,7 @@ class AuthIntegrationTest extends IntegrationTestBase {
                         "role", "admin",
                         "name", "Second Admin",
                         "email", "second.admin@example.com",
-                        "password", "Passw0rd!"))
+                        "password", "Passw0rd!2026"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token", not(emptyOrNullString())))
                 .andExpect(jsonPath("$.account.role").value("admin"));

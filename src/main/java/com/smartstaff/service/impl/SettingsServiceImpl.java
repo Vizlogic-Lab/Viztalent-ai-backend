@@ -8,9 +8,11 @@ import com.smartstaff.dto.request.*;
 import com.smartstaff.dto.response.*;
 import com.smartstaff.entity.AppSetting;
 import com.smartstaff.entity.User;
+import com.smartstaff.exception.ApiException;
 import com.smartstaff.repository.AppSettingRepository;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.CryptoService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,8 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String KEY_TWILIO_SID = "twilio_account_sid";
     private static final String KEY_TWILIO_TOKEN = "twilio_auth_token";
     private static final String KEY_TWILIO_FROM = "twilio_from_number";
+    private static final String KEY_TWILIO_ALLOWED_CC = "twilio_allowed_country_codes";
+    private static final String DEFAULT_ALLOWED_CC = "+91";
     private static final String KEY_PISTON_URL = "piston_url";
     private static final String KEY_PISTON_ENABLED = "piston_enabled";
     private static final String KEY_PISTON_LANGUAGES = "piston_languages";
@@ -152,6 +156,14 @@ public class SettingsServiceImpl implements SettingsService {
         if (notBlank(req.account_sid())) put(KEY_TWILIO_SID, req.account_sid().trim(), admin);
         if (notBlank(req.auth_token())) put(KEY_TWILIO_TOKEN, crypto.encrypt(req.auth_token().trim()), admin);
         if (notBlank(req.from_number())) put(KEY_TWILIO_FROM, req.from_number().trim(), admin);
+        if (notBlank(req.allowed_country_codes())) {
+            List<String> codes = parseCountryCodes(req.allowed_country_codes());
+            if (codes.isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Allowed country codes must look like +91 or +1 (comma-separated).", "invalid_country_codes");
+            }
+            put(KEY_TWILIO_ALLOWED_CC, String.join(",", codes), admin);
+        }
 
         boolean configured = notBlank(plain(KEY_TWILIO_SID).orElse(null))
                 && notBlank(decryptedOrNull(KEY_TWILIO_TOKEN));
@@ -253,6 +265,20 @@ public class SettingsServiceImpl implements SettingsService {
     @Override
     public String getTwilioAuthTokenOrNull() {
         return decryptedOrNull(KEY_TWILIO_TOKEN);
+    }
+
+    @Override
+    public List<String> getTwilioAllowedCountryCodes() {
+        return parseCountryCodes(plain(KEY_TWILIO_ALLOWED_CC).orElse(DEFAULT_ALLOWED_CC));
+    }
+
+    private static List<String> parseCountryCodes(String csv) {
+        List<String> codes = new ArrayList<>();
+        for (String c : csv.split(",")) {
+            String code = c.trim();
+            if (code.matches("\\+[1-9]\\d{0,3}")) codes.add(code);
+        }
+        return codes;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────

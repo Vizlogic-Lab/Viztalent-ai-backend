@@ -257,6 +257,9 @@ public class JobServiceImpl implements JobService {
 
     @Override
     public StoredFile loadResumeFile(UUID jobId, String filename) {
+        if (filename == null || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid file name.", "invalid_path");
+        }
         Resume resume = resumeRepository.findByJobIdAndFilename(jobId, filename)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Resume not found: " + filename));
         return new StoredFile(readFile(Path.of(resume.getFilePath())), resume.getFilename(), guessContentType(resume.getFilename()));

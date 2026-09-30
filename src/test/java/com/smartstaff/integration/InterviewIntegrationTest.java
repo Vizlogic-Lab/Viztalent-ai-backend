@@ -200,8 +200,9 @@ class InterviewIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.interviews[0].candidate_name").value("Jane Doe"))
                 .andExpect(jsonPath("$.interviews[0].phone").value("+911234567890"))
                 .andExpect(jsonPath("$.interviews[0].role_title").value("Platform Engineer"))
-                .andExpect(jsonPath("$.interviews[0].transcript.length()").value(2))
+                .andExpect(jsonPath("$.interviews[0].transcript.length()").value(5))
                 .andExpect(jsonPath("$.interviews[0].transcript[0].answer").value("Answer one"))
+                .andExpect(jsonPath("$.interviews[0].transcript[2].answer").value(""))
                 .andExpect(jsonPath("$.interviews[0].transcript[1].skill").value("java"))
                 .andExpect(jsonPath("$.interviews[0].saved_at").value("2026-09-24T10:05:00Z"));
     }
@@ -280,7 +281,7 @@ class InterviewIntegrationTest extends IntegrationTestBase {
         assertThat(statuses).filteredOn(s -> s == 400).hasSize(11);
         assertThat(jdbc.queryForObject(
                 "select count(*) from interview_turns t join interviews i on i.id = t.interview_id where i.candidate_name = 'Jane Doe' and i.job_id = ?::uuid",
-                Integer.class, job)).as("no duplicated turns from the losing requests").isEqualTo(2);
+                Integer.class, job)).as("no duplicated turns from the losing requests").isEqualTo(5);
     }
 
     @Test

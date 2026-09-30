@@ -82,13 +82,10 @@ public class SecurityConfig {
                         // one). Gated instead by X-Twilio-Signature — see TwilioWebhookController.
                         .requestMatchers("/api/interview/twiml/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // File downloads now require signed URLs (with ?exp and ?sig parameters).
-                        // The DownloadSignatureFilter will validate the signature before the
-                        // endpoint is reached. Authenticated users can request signed URLs via
-                        // POST /api/downloads/sign (access control checked per endpoint).
+                        // Downloads need either a bearer token or a signed URL (see
+                        // DownloadSignatureFilter, which authenticates signed requests
+                        // as the user who signed them). POST /api/downloads/sign issues them.
                         .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").authenticated()
-                        // Signing endpoint: authenticated, access control checked per path
-                        .requestMatchers(HttpMethod.POST, "/api/downloads/sign").authenticated()
                         // Admin-only areas are decided here, in the filter chain, so a non-admin is
                         // refused (403) before the request body is even parsed or validated — without
                         // this, an employee sending an invalid body got a 400 instead. The
@@ -105,7 +102,7 @@ public class SecurityConfig {
                 )
                 // Right after CORS so a 429 still carries the CORS headers (see RateLimitFilter).
                 .addFilterAfter(rateLimitFilter, CorsFilter.class)
-                // Download signature validation (before JWT so public downloads can be signed)
+                // Signed download URLs authenticate before the bearer-token filter runs.
                 .addFilterAfter(downloadSignatureFilter, RateLimitFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

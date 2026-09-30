@@ -197,7 +197,7 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("screened candidates show up in the job detail, and in the CSV report (which is a plain, unauthenticated download link)")
+    @DisplayName("screened candidates show up in the job detail, and in the CSV report opened through a signed link")
     void detailAndReport() throws Exception {
         Account owner = newEmployee();
         String job = uploadJd(owner, "senior_java_developer.txt", JD);
@@ -208,8 +208,10 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.candidates.length()").value(1))
                 .andExpect(jsonPath("$.candidates[0].Candidate_Name").value("Priya Nair"));
 
-        // The frontend opens this as a plain <a href>, so no bearer token is ever sent.
-        mvc.perform(MockMvcRequestBuilders.get("/api/download_report"))
+        // The frontend opens this as a plain <a href> with no bearer token, so it signs the path first.
+        String url = bodyOf(postJsonAs(owner, "/api/downloads/sign", Map.of("path", "/api/download_report"))
+                .andExpect(status().isOk())).path("url").asText();
+        mvc.perform(MockMvcRequestBuilders.get(url))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.parseMediaType("text/csv")));
     }

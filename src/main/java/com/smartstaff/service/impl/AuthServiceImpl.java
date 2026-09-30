@@ -72,19 +72,18 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse signup(SignupRequest req, boolean requesterIsAdmin) {
-        // Validate password policy: 10+ chars, 1 letter, 1 digit
-        validatePasswordPolicy(req.password());
-
         Role role = parseRole(req.role());
 
+        // Only an existing admin may create another admin. A visitor hitting the
+        // public /signup form with role=admin is refused (the seeder guarantees a
+        // bootstrap admin already exists, so this never locks anyone out).
+        if (role == Role.ADMIN && !requesterIsAdmin) {
+            throw new ApiException(HttpStatus.FORBIDDEN,
+                    "Only an existing admin can create an admin account.", "admin_only");
+        }
+        validatePasswordPolicy(req.password());
+
         if (role == Role.ADMIN) {
-            // Only an existing admin may create another admin. A visitor hitting the
-            // public /signup form with role=admin is refused (the seeder guarantees a
-            // bootstrap admin already exists, so this never locks anyone out).
-            if (!requesterIsAdmin) {
-                throw new ApiException(HttpStatus.FORBIDDEN,
-                        "Only an existing admin can create an admin account.", "admin_only");
-            }
             if (req.email() == null || req.email().isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Email is required for an admin account.");
             }
@@ -146,26 +145,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void changePassword(User user, String currentPassword, String newPassword) {
-        // Verify current password
+        // 400, not 401: a 401 would make the frontend treat the session as logged out.
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Current password is incorrect.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.", "wrong_password");
         }
+        validatePasswordPolicy(newPassword);
 
-        // Validate new password policy: 10+ chars, 1 letter, 1 digit
-        if (newPassword.length() < 10) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must be at least 10 characters.");
-        }
-        if (!newPassword.matches(".*[a-zA-Z].*")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must contain at least one letter.");
-        }
-        if (!newPassword.matches(".*\\d.*")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must contain at least one digit.");
-        }
-
-        // Update password
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }

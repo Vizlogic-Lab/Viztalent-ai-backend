@@ -36,6 +36,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +141,9 @@ public class InterviewServiceImpl implements InterviewService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Interview not found."));
         if (!interview.getJob().getId().equals(jobId)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "This interview doesn't belong to that job.");
+        }
+        if ("COMPLETED".equals(interview.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "This interview has already been completed.", "interview_completed");
         }
 
         if (req.candidate_name() != null) interview.setCandidateName(req.candidate_name());
@@ -247,15 +251,14 @@ public class InterviewServiceImpl implements InterviewService {
 
     private void completeInterview(Interview interview, List<TranscriptTurnRequest> transcript,
                                     Instant startedAt, Instant endedAt) {
-        interviewTurnRepository.deleteByInterviewId(interview.getId());
-        int seq = 0;
-        for (TranscriptTurnRequest t : transcript) {
-            InterviewTurn turn = new InterviewTurn();
-            turn.setInterview(interview);
-            turn.setSeq(seq++);
-            turn.setCategory(t.category());
-            turn.setSkill(t.skill());
-            turn.setQuestion(t.question());
+        Map<Integer, InterviewTurn> bySeq = new HashMap<>();
+        for (InterviewTurn turn : interviewTurnRepository.findByInterviewIdOrderBySeqAsc(interview.getId())) {
+            bySeq.put(turn.getSeq(), turn);
+        }
+        for (int i = 0; i < transcript.size(); i++) {
+            TranscriptTurnRequest t = transcript.get(i);
+            InterviewTurn turn = bySeq.get(t.seq() != null ? t.seq() : i);
+            if (turn == null) continue;
             turn.setAnswer(t.answer() == null ? "" : t.answer());
             interviewTurnRepository.save(turn);
         }
