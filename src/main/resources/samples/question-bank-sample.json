@@ -1,0 +1,133 @@
+[
+  {
+    "type": "MCQ",
+    "level": "L1",
+    "skill": "java",
+    "difficulty": "easy",
+    "role_families": ["BACKEND", "FULLSTACK"],
+    "question": "A Java method declares `throws IOException`. What must a caller do?",
+    "options": [
+      "Nothing; checked exceptions are optional",
+      "Catch it or declare it in its own throws clause",
+      "Wrap the call in a finally block",
+      "Mark the calling method synchronized"
+    ],
+    "correct_indices": [1],
+    "explanation": "IOException is a checked exception, so callers must handle or declare it."
+  },
+  {
+    "type": "MSQ",
+    "level": "L1",
+    "skill": "sql",
+    "difficulty": "medium",
+    "question": "Which of these are SQL aggregate functions?",
+    "options": ["COUNT", "SUM", "CONCAT", "AVG"],
+    "correct_indices": [0, 1, 3],
+    "explanation": "CONCAT is a string function; the others aggregate rows."
+  },
+  {
+    "type": "CODE_WRITE",
+    "level": "L1",
+    "skill": "python",
+    "difficulty": "easy",
+    "role_families": ["BACKEND", "DATA", "FULLSTACK"],
+    "points": 15,
+    "time_estimate_sec": 540,
+    "title": "Sum of even amounts",
+    "statement": "An order service logs n amounts. Print the sum of the even amounts.",
+    "constraints": "0 <= n <= 100000; each amount fits in a 32-bit signed integer",
+    "input_format": "First line n, second line n integers separated by spaces (absent when n is 0)",
+    "output_format": "One integer: the sum of the even amounts",
+    "languages": ["python", "java"],
+    "starter_code": {
+      "python": "import sys\n\ndata = sys.stdin.read().split()\n# your code here\n",
+      "java": "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        // your code here\n    }\n}\n"
+    },
+    "reference_solution": {
+      "python": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0]) if data else 0\nnums = map(int, data[1:1 + n])\nprint(sum(x for x in nums if x % 2 == 0))\n",
+      "java": "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = in.hasNextInt() ? in.nextInt() : 0;\n        long sum = 0;\n        for (int i = 0; i < n; i++) {\n            long x = in.nextLong();\n            if (x % 2 == 0) sum += x;\n        }\n        System.out.println(sum);\n    }\n}\n"
+    },
+    "naive_solution": {
+      "python": "import sys\n\ndata = sys.stdin.read().split()\nprint(sum(map(int, data[1:])))\n"
+    },
+    "tests": [
+      {"input": "4\n1 2 3 4\n", "expected_output": "6", "visible": true, "category": "BASIC"},
+      {"input": "3\n2 4 6\n", "expected_output": "12", "visible": true, "category": "BASIC"},
+      {"input": "2\n1 3\n", "expected_output": "0", "visible": true, "category": "BASIC"},
+      {"input": "0\n", "expected_output": "0", "visible": false, "category": "EDGE"},
+      {"input": "1\n-4\n", "expected_output": "-4", "visible": false, "category": "EDGE"},
+      {"input": "5\n-3 -2 0 7 8\n", "expected_output": "6", "visible": false, "category": "EDGE"},
+      {"input": "2\n7 7\n", "expected_output": "0", "visible": false, "category": "EDGE"},
+      {"input": "6\n10 11 12 13 14 15\n", "expected_output": "36", "visible": false, "category": "BASIC"},
+      {"input": "4\n2 2 2 2\n", "expected_output": "8", "visible": false, "category": "BASIC"},
+      {"input": "3\n2000000000 1999999999 2000000000\n", "expected_output": "4000000000", "visible": false, "category": "LARGE"},
+      {"input": "10\n1 2 3 4 5 6 7 8 9 10\n", "expected_output": "30", "visible": false, "category": "LARGE"}
+    ],
+    "rubric": [
+      {"criterion": "approach", "weight": 10, "description": "Single pass with a parity check"},
+      {"criterion": "complexity", "weight": 8, "description": "O(n) time, no extra lists needed"},
+      {"criterion": "edge_cases", "weight": 6, "description": "Handles n = 0, negatives and sums beyond 32 bits"},
+      {"criterion": "readability", "weight": 6, "description": "Clear names, no dead code"}
+    ],
+    "expected_complexity": "O(n)"
+  },
+  {
+    "type": "CODE_DEBUG",
+    "level": "L1",
+    "skill": "python",
+    "difficulty": "easy",
+    "title": "Daily total is short",
+    "statement": "This script should print the total of n sales amounts, but the finance team says the totals are too low. Fix it.",
+    "languages": ["python"],
+    "buggy_code": {
+      "python": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\ntotal = 0\nfor i in range(1, n):\n    total += int(data[i])\nprint(total)\n"
+    },
+    "fixed_code": {
+      "python": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\ntotal = 0\nfor i in range(1, n + 1):\n    total += int(data[i])\nprint(total)\n"
+    },
+    "bug_descriptions": ["The loop stops one element early, so the last amount is never added."],
+    "tests": [
+      {"input": "3\n1 2 3\n", "expected_output": "6", "visible": true, "category": "BASIC"},
+      {"input": "1\n5\n", "expected_output": "5", "visible": true, "category": "EDGE"},
+      {"input": "2\n10 20\n", "expected_output": "30", "visible": false, "category": "BASIC"},
+      {"input": "4\n1 1 1 1\n", "expected_output": "4", "visible": false, "category": "BASIC"},
+      {"input": "0\n", "expected_output": "0", "visible": false, "category": "EDGE"},
+      {"input": "5\n-1 -2 -3 -4 -5\n", "expected_output": "-15", "visible": false, "category": "EDGE"}
+    ]
+  },
+  {
+    "type": "CODE_OUTPUT",
+    "level": "L1",
+    "skill": "python",
+    "difficulty": "easy",
+    "title": "Sort in place",
+    "languages": ["python"],
+    "code": {
+      "python": "items = [3, 1, 2]\nresult = items.sort()\nprint(result)\nprint(items)\nprint(len(\"hello\"[1:4]))\n"
+    }
+  },
+  {
+    "type": "SCENARIO",
+    "level": "L2",
+    "skill": "spring",
+    "difficulty": "medium",
+    "role_families": ["BACKEND"],
+    "prompt": "After a release, the orders API times out under peak load while CPU stays low. What do you check first, and why?",
+    "model_answer": "Low CPU with timeouts points to waiting, not computing. I would check latency and error dashboards to see which endpoints and dependencies slowed down, then the database connection pool (active vs max, wait time) and thread pool saturation, then slow-query logs for new or changed queries from the release, and the timeout and retry settings on downstream calls. I would compare with the previous release, roll back if the cause is not found quickly, and confirm the fix with a load test.",
+    "key_points": [
+      "Low CPU means threads are waiting (I/O, locks, pools), not computing",
+      "Check connection-pool and thread-pool saturation",
+      "Look for slow or changed queries introduced by the release",
+      "Review downstream timeouts and retries",
+      "Roll back if needed and verify with a load test"
+    ]
+  },
+  {
+    "type": "LOGIC",
+    "level": "L1",
+    "difficulty": "easy",
+    "prompt": "A job queue receives 3 jobs per minute and a worker finishes 2 per minute. The queue starts empty. How many jobs are waiting after 12 minutes?",
+    "answer": "12",
+    "explanation": "The backlog grows by 3 - 2 = 1 job per minute, so 12 after 12 minutes."
+  }
+]

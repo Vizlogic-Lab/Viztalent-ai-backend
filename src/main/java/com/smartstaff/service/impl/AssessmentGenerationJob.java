@@ -98,6 +98,7 @@ public class AssessmentGenerationJob {
         final Set<String> profileSkills = new HashSet<>();
         final String apiKey;
         final Set<UUID> usedBankItems = new HashSet<>();
+        final Set<UUID> usedBefore = new HashSet<>();
         boolean geminiUsable;
         GenerationProgress progress;
 
@@ -155,6 +156,7 @@ public class AssessmentGenerationJob {
 
         int slotCount = loaded.blueprint().values().stream().mapToInt(b -> b.slots().size()).sum();
         Run run = new Run(assessmentId, loaded.source(), job, profile, settings.getGeminiApiKeyOrNull(), slotCount);
+        run.usedBefore.addAll(questions.bankItemsUsedByJob(job.getId(), assessmentId));
         updateStatus(assessmentId, AssessmentStatus.GENERATING, run.progress);
 
         Set<String> runnable = runner.availableLanguages().keySet();
@@ -192,6 +194,14 @@ public class AssessmentGenerationJob {
         }
         while (w.pending != null) {
             QuestionDraft draft = w.pending;
+            // First candidates were drafted for every slot before any was saved,
+            // so a bank item an earlier slot already took can resurface here; skip
+            // it so the same question never fills two slots of one assessment.
+            UUID bankItemId = draft.question().getBankItemId();
+            if (bankItemId != null && run.usedBankItems.contains(bankItemId)) {
+                w.pending = nextCandidate(run, w);
+                continue;
+            }
             QuestionValidator.Result result = validator.validate(draft, run.profileSkills, w.slot().targetSkill());
             w.log.add(origin(draft) + ": " + result.log());
             if (result.ok()) {
@@ -244,41 +254,89 @@ public class AssessmentGenerationJob {
         }
     }
 
-    /** Bank questions of the slot's type and level whose skill is the target,
-     *  another profile skill, or unset; target-skill matches first. */
+    /** Validated bank questions for the slot: same type and level; skill is
+     *  the target, another profile skill, or unset; role families include the
+     *  job's (or are empty); coding ones share a language with the job, and
+     *  only the shared languages are kept. Items this job's earlier versions
+     *  didn't use come first, then target-skill matches. */
     private Deque<QuestionDraft> bankCandidates(Run run, SlotWork w) {
         Blueprint.Slot slot = w.slot();
         String target = slot.targetSkill() == null ? null : slot.targetSkill().toLowerCase(Locale.ROOT);
-        List<QuestionBankItem> items = new ArrayList<>();
-        for (QuestionBankItem item : bank.findByLevelOrLevelIsNull(w.level())) {
-            if (run.usedBankItems.contains(item.getId())) continue;
-            QuestionType type;
-            try {
-                type = QuestionType.fromBankType(item.getType());
-            } catch (IllegalArgumentException e) {
-                continue;
-            }
-            if (type != slot.type()) continue;
-            String skill = item.getSkill() == null ? null : item.getSkill().trim().toLowerCase(Locale.ROOT);
-            if (skill != null && !skill.isEmpty() && !run.profileSkills.isEmpty()
-                    && !skill.equals(target) && !run.profileSkills.contains(skill)) continue;
-            items.add(item);
-        }
-        Collections.shuffle(items);
-        items.sort(Comparator.comparingInt(i -> i.getSkill() != null && i.getSkill().trim().equalsIgnoreCase(target) ? 0 : 1));
+        String family = run.profile.getRoleFamily().name();
+        List<String> jobLanguages = w.ctx.codeLanguages();
 
-        Deque<QuestionDraft> out = new ArrayDeque<>();
-        for (QuestionBankItem item : items.subList(0, Math.min(MAX_BANK_CANDIDATES, items.size()))) {
-            AssessmentQuestion q = QuestionDrafter.baseQuestion(w.level(), slot);
-            q.setOrigin("BANK");
-            q.setBankItemId(item.getId());
-            q.setPrompt(item.getPrompt());
-            q.setOptions(new ArrayList<>(item.getOptions()));
-            q.setCorrectIndices(new ArrayList<>(item.getCorrectIndices()));
-            q.setSkill(item.getSkill());
-            if (item.getDifficulty() != null && !item.getDifficulty().isBlank()) q.setDifficulty(item.getDifficulty());
-            out.add(new QuestionDraft(q, Map.of()));
+        Deque<QuestionDraft> drafts = tx.execute(s -> {
+            List<QuestionBankItem> items = new ArrayList<>();
+            for (QuestionBankItem item : bank.findByLevelOrLevelIsNull(w.level())) {
+                if (!item.isValidated() || run.usedBankItems.contains(item.getId())) continue;
+                if (!slot.type().name().equals(item.getType())) continue;
+                String skill = item.getSkill() == null ? "" : item.getSkill().trim().toLowerCase(Locale.ROOT);
+                if (!skill.isEmpty() && !run.profileSkills.isEmpty()
+                        && !skill.equals(target) && !run.profileSkills.contains(skill)) continue;
+                if (!item.getRoleFamilies().isEmpty() && !item.getRoleFamilies().contains(family)) continue;
+                if (slot.type().isCode() && item.getLanguages().stream().noneMatch(jobLanguages::contains)) continue;
+                items.add(item);
+            }
+            Collections.shuffle(items);
+            items.sort(Comparator.comparingInt(i -> (run.usedBefore.contains(i.getId()) ? 2 : 0)
+                    + (i.getSkill() != null && i.getSkill().trim().equalsIgnoreCase(target) ? 0 : 1)));
+
+            Deque<QuestionDraft> out = new ArrayDeque<>();
+            for (QuestionBankItem item : items.subList(0, Math.min(MAX_BANK_CANDIDATES, items.size()))) {
+                out.add(fromBank(item, w, jobLanguages));
+            }
+            return out;
+        });
+        return drafts == null ? new ArrayDeque<>() : drafts;
+    }
+
+    private static QuestionDraft fromBank(QuestionBankItem item, SlotWork w, List<String> jobLanguages) {
+        AssessmentQuestion q = QuestionDrafter.baseQuestion(w.level(), w.slot());
+        q.setOrigin("BANK");
+        q.setBankItemId(item.getId());
+        q.setSkill(item.getSkill());
+        if (item.getDifficulty() != null && !item.getDifficulty().isBlank()) {
+            q.setDifficulty(item.getDifficulty().toLowerCase(Locale.ROOT));
         }
+        q.setTitle(item.getTitle());
+        q.setPrompt(item.getPrompt());
+        q.setConstraints(item.getConstraints());
+        q.setInputFormat(item.getInputFormat());
+        q.setOutputFormat(item.getOutputFormat());
+        q.setOptions(new ArrayList<>(item.getOptions()));
+        q.setCorrectIndices(new ArrayList<>(item.getCorrectIndices()));
+        q.setModelAnswer(item.getModelAnswer());
+        q.setKeyPoints(new ArrayList<>(item.getKeyPoints()));
+        q.setExplanation(item.getExplanation());
+        q.setExpectedComplexity(item.getExpectedComplexity());
+        q.setBugDescriptions(new ArrayList<>(item.getBugDescriptions()));
+        q.setRubric(new ArrayList<>(item.getRubric()));
+
+        Map<String, String> naive = Map.of();
+        if (w.slot().type().isCode()) {
+            List<String> shared = item.getLanguages().stream().filter(jobLanguages::contains).toList();
+            q.setLanguages(new ArrayList<>(shared));
+            q.setStarterCode(only(item.getStarterCode(), shared));
+            q.setReferenceSolution(only(item.getReferenceSolution(), shared));
+            q.setBuggyCode(only(item.getBuggyCode(), shared));
+            naive = only(item.getNaiveSolution(), shared);
+            for (QuestionBankTestCase t : item.getTestCases()) {
+                QuestionTestCase tc = new QuestionTestCase();
+                tc.setInput(t.getInput());
+                tc.setExpectedOutput(t.getExpectedOutput());
+                tc.setVisible(t.isVisible());
+                tc.setCategory(t.getCategory());
+                tc.setWeight(t.getWeight());
+                tc.setFloatTolerance(t.getFloatTolerance());
+                q.addTestCase(tc);
+            }
+        }
+        return new QuestionDraft(q, naive);
+    }
+
+    private static Map<String, String> only(Map<String, String> code, List<String> languages) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String lang : languages) if (code.containsKey(lang)) out.put(lang, code.get(lang));
         return out;
     }
 

@@ -30,7 +30,7 @@ class QuestionBankFileParserTest {
         var q = result.questions().get(0);
         assertThat(q.type()).isEqualTo("MCQ");
         assertThat(q.level()).isEqualTo("L1");
-        assertThat(q.difficulty()).isEqualTo("EASY");
+        assertThat(q.difficulty()).isEqualTo("easy");
         assertThat(q.prompt()).isEqualTo("What is 2+2, roughly?");
         assertThat(q.options()).containsExactly("3", "4", "5");
         assertThat(q.correctIndices()).containsExactly(1);
@@ -50,16 +50,16 @@ class QuestionBankFileParserTest {
     }
 
     @Test
-    @DisplayName("descriptive and coding questions need no options")
+    @DisplayName("scenario and logic questions need no options (coding questions are JSON-only)")
     void freeFormTypes() throws IOException {
         var result = csv("""
                 type,question
-                coding,Reverse a string.
-                descriptive,Explain the CAP theorem.
+                scenario,Design an API for this.
+                logic,What is 2+2?
                 """);
 
         assertThat(result.questions()).extracting(QuestionBankFileParser.ParsedQuestion::type)
-                .containsExactly("CODING", "DESCRIPTIVE");
+                .containsExactly("SCENARIO", "LOGIC");
     }
 
     @Test

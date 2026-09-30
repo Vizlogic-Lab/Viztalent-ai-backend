@@ -232,15 +232,15 @@ class SettingsIntegrationTest extends IntegrationTestBase {
     void questionBankAccess() throws Exception {
         Account employee = newEmployee();
 
-        uploadFile(employee, "/api/questions/upload", "file", "bank.csv", "type,question\ncoding,Reverse a string.\n").andExpect(status().isForbidden());
+        uploadFile(employee, "/api/questions/upload", "file", "bank.csv", "type,skill,question,options,correct_index\nmcq,java,Which keyword is for final fields?,final|static|const,0\n").andExpect(status().isForbidden());
         postJsonAs(employee, "/api/questions/clear", Map.of()).andExpect(status().isForbidden());
         getAs(employee, "/api/questions/bank").andExpect(status().isOk());
 
-        uploadFile(admin, "/api/questions/upload", "file", "bank.csv", "type,question\ncoding,Reverse a string.\n").andExpect(status().isOk());
+        uploadFile(admin, "/api/questions/upload", "file", "bank.csv", "type,skill,question,options,correct_index\nmcq,java,Which keyword is for final fields?,final|static|const,0\n").andExpect(status().isOk());
 
         JsonNode bank = bodyOf(getAs(employee, "/api/questions/bank").andExpect(status().isOk()));
         assertThat(bank.path("stats").path("total").asInt()).isEqualTo(1);
-        assertThat(bank.path("stats").path("by_type").path("CODING").asInt()).isEqualTo(1);
+        assertThat(bank.path("stats").path("by_type").path("MCQ").asInt()).isEqualTo(1);
         assertThat(bank.path("uploads")).hasSize(1);
     }
 }

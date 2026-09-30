@@ -20,11 +20,7 @@ public class QuestionDrafter {
     static final int JD_CHARS = 1500;
 
     /** Fixed weights (30% of a CODE_WRITE question); Gemini only describes them. */
-    static final List<RubricCriterion> CODE_WRITE_RUBRIC = List.of(
-            new RubricCriterion("approach", 10, "Approach and algorithm choice"),
-            new RubricCriterion("complexity", 8, "Time/space complexity versus the expected one"),
-            new RubricCriterion("edge_cases", 6, "Edge-case handling visible in the code"),
-            new RubricCriterion("readability", 6, "Naming and structure"));
+    static final List<RubricCriterion> CODE_WRITE_RUBRIC = RubricCriterion.CODE_WRITE_DEFAULT;
 
     private static final Map<String, String> LANGUAGE_ALIASES = Map.of(
             "c++", "cpp", "js", "javascript", "node", "javascript", "nodejs", "javascript", "python3", "python");
