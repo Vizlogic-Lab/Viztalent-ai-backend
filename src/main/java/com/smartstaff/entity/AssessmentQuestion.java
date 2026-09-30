@@ -51,9 +51,39 @@ public class AssessmentQuestion {
     @Column(name = "time_estimate_sec")
     private Integer timeEstimateSec;
 
+    @Column(columnDefinition = "TEXT")
+    private String title;
+
     /** Statement shown to the candidate. */
     @Column(nullable = false, columnDefinition = "TEXT")
     private String prompt;
+
+    @Column(columnDefinition = "TEXT")
+    private String constraints;
+
+    @Column(name = "input_format", columnDefinition = "TEXT")
+    private String inputFormat;
+
+    @Column(name = "output_format", columnDefinition = "TEXT")
+    private String outputFormat;
+
+    /** Why the answer is right (MCQ/MSQ/LOGIC); HR-facing. */
+    @Column(columnDefinition = "TEXT")
+    private String explanation;
+
+    @Column(name = "expected_complexity", length = 64)
+    private String expectedComplexity;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "bug_descriptions", columnDefinition = "jsonb")
+    private List<String> bugDescriptions = new ArrayList<>();
+
+    /** AI or BANK. */
+    @Column(nullable = false, length = 8)
+    private String origin = "AI";
+
+    @Column(name = "bank_item_id")
+    private UUID bankItemId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")

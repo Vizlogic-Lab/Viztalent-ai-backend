@@ -3,10 +3,14 @@ package com.smartstaff.service.impl;
 import com.smartstaff.dto.request.InviteMintRequest;
 import com.smartstaff.dto.response.InviteMintResponse;
 import com.smartstaff.dto.response.InviteResponse;
+import com.smartstaff.entity.Assessment;
+import com.smartstaff.entity.AssessmentStatus;
 import com.smartstaff.entity.Invite;
 import com.smartstaff.entity.Job;
 import com.smartstaff.entity.User;
 import com.smartstaff.exception.ApiException;
+import com.smartstaff.repository.AssessmentQuestionRepository;
+import com.smartstaff.repository.AssessmentRepository;
 import com.smartstaff.repository.InviteRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.service.InviteService;
@@ -45,11 +49,17 @@ public class InviteServiceImpl implements InviteService {
     private final JobRepository jobRepository;
     private final InviteRepository inviteRepository;
     private final SettingsService settingsService;
+    private final AssessmentRepository assessmentRepository;
+    private final AssessmentQuestionRepository assessmentQuestionRepository;
 
-    public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService) {
+    public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService,
+                             AssessmentRepository assessmentRepository,
+                             AssessmentQuestionRepository assessmentQuestionRepository) {
         this.jobRepository = jobRepository;
         this.inviteRepository = inviteRepository;
         this.settingsService = settingsService;
+        this.assessmentRepository = assessmentRepository;
+        this.assessmentQuestionRepository = assessmentQuestionRepository;
     }
 
     @Override
@@ -68,22 +78,34 @@ public class InviteServiceImpl implements InviteService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "candidate_email is required.");
         }
 
+        // Invites always point at the current READY version.
+        Assessment assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
+                .filter(a -> a.getStatus() == AssessmentStatus.READY)
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
+                        "There is no ready assessment for this job yet — generate one first.", "no_ready_assessment"));
+        for (String level : levels) {
+            if (assessmentQuestionRepository.countByAssessmentIdAndLevel(assessment.getId(), level) == 0) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        "The current assessment has no " + level + " questions.", "level_not_in_assessment");
+            }
+        }
+
         long ttlSeconds = settingsService.getInviteTtlSeconds();
         String createdBy = admin == null ? null : admin.publicId();
         List<InviteResponse> out = new ArrayList<>();
 
         if (req.combined()) {
-            out.add(mintOne(job, req, levels, true, ttlSeconds, createdBy));
+            out.add(mintOne(job, assessment, req, levels, true, ttlSeconds, createdBy));
         } else {
             for (String level : levels) {
-                out.add(mintOne(job, req, List.of(level), false, ttlSeconds, createdBy));
+                out.add(mintOne(job, assessment, req, List.of(level), false, ttlSeconds, createdBy));
             }
         }
 
         return new InviteMintResponse(true, out);
     }
 
-    private InviteResponse mintOne(Job job, InviteMintRequest req, List<String> levels, boolean combined,
+    private InviteResponse mintOne(Job job, Assessment assessment, InviteMintRequest req, List<String> levels, boolean combined,
                                     long ttlSeconds, String createdBy) {
         String rawToken = randomToken();
 
@@ -91,6 +113,7 @@ public class InviteServiceImpl implements InviteService {
         invite.setTokenHash(FileStorageService.sha256Hex(rawToken.getBytes(StandardCharsets.UTF_8)));
         invite.setKind("ASSESSMENT");
         invite.setJob(job);
+        invite.setAssessment(assessment);
         invite.setCandidateEmail(req.candidate_email().trim());
         invite.setCandidateName(req.candidate_name());
         invite.setLevels(levels);

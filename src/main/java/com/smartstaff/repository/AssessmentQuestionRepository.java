@@ -11,4 +11,6 @@ public interface AssessmentQuestionRepository extends JpaRepository<AssessmentQu
     List<AssessmentQuestion> findByAssessmentIdOrderByLevelAscSeqAsc(UUID assessmentId);
 
     long countByAssessmentId(UUID assessmentId);
+
+    long countByAssessmentIdAndLevel(UUID assessmentId, String level);
 }

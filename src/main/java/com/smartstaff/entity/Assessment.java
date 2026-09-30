@@ -51,6 +51,10 @@ public class Assessment {
     @Column(columnDefinition = "TEXT")
     private String error;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private GenerationProgress progress = GenerationProgress.start(0);
+
     @Column(name = "generated_at")
     private Instant generatedAt;
 

@@ -16,6 +16,8 @@ public interface AssessmentRepository extends JpaRepository<Assessment, UUID> {
 
     Optional<Assessment> findByJobIdAndVersion(UUID jobId, int version);
 
+    Optional<Assessment> findTopByJobIdOrderByVersionDesc(UUID jobId);
+
     List<Assessment> findByJobIdOrderByVersionDesc(UUID jobId);
 
     @Query("select coalesce(max(a.version), 0) from Assessment a where a.job.id = :jobId")
@@ -27,4 +29,10 @@ public interface AssessmentRepository extends JpaRepository<Assessment, UUID> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Assessment a set a.current = false where a.job.id = :jobId and a.current = true")
     int clearCurrent(@Param("jobId") UUID jobId);
+
+    @Modifying
+    @Query("update Assessment a set a.status = com.smartstaff.entity.AssessmentStatus.FAILED, a.error = :error "
+            + "where a.status in (com.smartstaff.entity.AssessmentStatus.QUEUED, "
+            + "com.smartstaff.entity.AssessmentStatus.GENERATING, com.smartstaff.entity.AssessmentStatus.VALIDATING)")
+    int failInProgress(@Param("error") String error);
 }

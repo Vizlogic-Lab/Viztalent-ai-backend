@@ -30,8 +30,8 @@ class PracticalSchemaIntegrationTest extends IntegrationTestBase {
 
     private static final String BANK_CSV = """
             type,level,skill,difficulty,question,options,correct_index
-            mcq,L1,Math,easy,What is 2+2?,3|4|5,1
-            msq,L1,HTTP,medium,Which are valid HTTP methods?,GET|POST|FETCH|DELETE,"0,1,3"
+            mcq,L1,java,easy,Which keyword makes a Java field constant?,final|static|const,0
+            msq,L1,sql,medium,Which are SQL aggregate functions?,COUNT|SUM|FETCH|AVG,"0,1,3"
             """;
 
     @Autowired DataSource dataSource;
@@ -210,20 +210,21 @@ class PracticalSchemaIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("concurrent regenerations get distinct versions and leave exactly one current")
+    @DisplayName("concurrent regenerations never clash: each gets its own version or a 409, and exactly one is current")
     void concurrentRegeneration() throws Exception {
         uploadFile(admin, "/api/questions/upload", "file", "bank.csv", BANK_CSV).andExpect(status().isOk());
 
         List<Integer> statuses = inParallel(4, () -> postJsonAs(admin, "/api/assessment/generate",
                 Map.of("session_id", job, "question_source", "custom")).andReturn().getResponse().getStatus());
 
-        assertThat(statuses).containsOnly(200);
-        assertThat(jdbc.queryForList("select version from assessments where job_id = ?::uuid order by version", Integer.class, job))
-                .containsExactly(1, 2, 3, 4);
+        assertThat(statuses).containsOnly(200, 409).contains(200);
+        List<Integer> versions = jdbc.queryForList("select version from assessments where job_id = ?::uuid order by version",
+                Integer.class, job);
+        assertThat(versions).hasSize((int) statuses.stream().filter(s -> s == 200).count()).doesNotHaveDuplicates();
         assertThat(jdbc.queryForObject("select count(*) from assessments where job_id = ?::uuid and is_current", Integer.class, job))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("select version from assessments where job_id = ?::uuid and is_current", Integer.class, job))
-                .isEqualTo(4);
+                .isEqualTo(versions.get(versions.size() - 1));
     }
 
     @Test

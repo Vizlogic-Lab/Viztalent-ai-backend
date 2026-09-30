@@ -162,6 +162,22 @@ public abstract class IntegrationTestBase {
         return bodyOf(result).path("job_id").asText();
     }
 
+    /** A READY, current assessment version with one MCQ per level, written
+     *  straight to the database (for tests about what happens after generation). */
+    protected String seedReadyAssessment(String jobId, String... levels) {
+        jdbc.update("update assessments set is_current = false where job_id = ?::uuid", jobId);
+        Integer version = jdbc.queryForObject(
+                "select coalesce(max(version), 0) + 1 from assessments where job_id = ?::uuid", Integer.class, jobId);
+        String id = jdbc.queryForObject("insert into assessments (job_id, source, version, status, is_current, generated_at) "
+                + "values (?::uuid, 'AI', ?, 'READY', true, now()) returning id::text", String.class, jobId, version);
+        for (String level : levels) {
+            jdbc.update("insert into assessment_questions (assessment_id, level, seq, type, dimension, competency, points, prompt, "
+                    + "options, correct_indices, validated) values (?::uuid, ?, 0, 'MCQ', 'THEORY', 'CONCEPTS', 5, 'Seeded?', "
+                    + "'[\"a\",\"b\"]', '[0]', true)", id, level);
+        }
+        return id;
+    }
+
     protected void setGeminiKey(Account admin, String key) throws Exception {
         postJsonAs(admin, "/api/config/gemini", java.util.Map.of("api_key", key));
     }

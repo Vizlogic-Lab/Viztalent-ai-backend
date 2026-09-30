@@ -26,4 +26,17 @@ public class AsyncExecutorConfig {
         executor.initialize();
         return executor;
     }
+
+    /** Question-set generation: long-running (many Gemini and code-runner calls). */
+    @Bean(name = "assessmentExecutor")
+    public Executor assessmentExecutor(@Value("${app.async.inline:false}") boolean inline) {
+        if (inline) return new SyncTaskExecutor();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("assessment-gen-");
+        executor.initialize();
+        return executor;
+    }
 }

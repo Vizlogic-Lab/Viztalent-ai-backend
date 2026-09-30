@@ -41,6 +41,11 @@ public class Invite {
     @JoinColumn(name = "interview_id")
     private Interview interview;
 
+    /** The assessment version this invite was minted against (assessment invites). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assessment_id")
+    private Assessment assessment;
+
     @Column(name = "candidate_email", nullable = false)
     private String candidateEmail;
 

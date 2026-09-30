@@ -302,6 +302,7 @@ class InterviewIntegrationTest extends IntegrationTestBase {
         byToken("no-such-token").andExpect(status().isBadRequest()).andExpect(jsonPath("$.message", containsString("invalid")));
         saveByToken("no-such-token", transcriptBody("x")).andExpect(status().isBadRequest());
 
+        seedReadyAssessment(job, "L1");
         JsonNode assessmentInvite = bodyOf(postJsonAs(admin, "/api/invites/mint",
                 Map.of("session_id", job, "candidate_email", "a@example.com", "levels", List.of("L1"))).andExpect(status().isOk()));
         String url = assessmentInvite.path("invites").get(0).path("url").asText();
