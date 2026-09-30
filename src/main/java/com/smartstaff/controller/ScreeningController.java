@@ -50,7 +50,9 @@ public class ScreeningController {
     }
 
     @GetMapping("/api/download_report")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<byte[]> downloadReport(@AuthenticationPrincipal User requester) {
+        // Report CSV is scoped by the service: admin = all jobs, employee = own jobs only.
         byte[] csv = screeningService.downloadReportCsv(requester);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/csv"))

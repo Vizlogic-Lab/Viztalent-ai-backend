@@ -5,13 +5,18 @@ import com.smartstaff.entity.Role;
 import com.smartstaff.entity.User;
 import com.smartstaff.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /** Seeds the two demo accounts the login screen's "Demo Credentials" buttons
  *  already advertise, so a fresh database is usable immediately. Idempotent —
- *  only inserts what's missing. */
+ *  only inserts what's missing.
+ *
+ *  Only runs when NOT in the "prod" profile (@Profile("!prod")).
+ *  Demo data must never exist in production. */
 @Component
+@Profile("!prod")
 public class DemoDataSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;

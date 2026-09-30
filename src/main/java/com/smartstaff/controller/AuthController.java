@@ -1,6 +1,7 @@
 package com.smartstaff.controller;
 
 import com.smartstaff.dto.request.ApproveRequest;
+import com.smartstaff.dto.request.ChangePasswordRequest;
 import com.smartstaff.dto.request.LoginRequest;
 import com.smartstaff.dto.request.SignupRequest;
 import com.smartstaff.dto.response.AccountsResponse;
@@ -61,6 +62,15 @@ public class AuthController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SimpleResponse> approve(@Valid @RequestBody ApproveRequest req) {
         authService.setApproval(req.employee_id(), req.approved());
+        return ResponseEntity.ok(SimpleResponse.OK);
+    }
+
+    @PostMapping("/change_password")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SimpleResponse> changePassword(
+            @Valid @RequestBody ChangePasswordRequest req,
+            @AuthenticationPrincipal User user) {
+        authService.changePassword(user, req.current(), req.new_password());
         return ResponseEntity.ok(SimpleResponse.OK);
     }
 }

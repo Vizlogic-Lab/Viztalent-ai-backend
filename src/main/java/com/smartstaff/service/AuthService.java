@@ -18,4 +18,10 @@ public interface AuthService {
     AccountsResponse accounts();
 
     void setApproval(String employeeId, boolean approved);
+
+    /** Change password for the authenticated user.
+     *  Validates password policy: 10+ chars, 1 letter, 1 digit.
+     *  @throws com.smartstaff.exception.ApiException if current password is wrong or new password violates policy
+     */
+    void changePassword(User user, String currentPassword, String newPassword);
 }

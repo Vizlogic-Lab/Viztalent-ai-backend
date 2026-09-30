@@ -2,6 +2,7 @@ package com.smartstaff.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.dto.response.ApiErrorResponse;
+import com.smartstaff.filter.DownloadSignatureFilter;
 import com.smartstaff.filter.RateLimitFilter;
 import com.smartstaff.security.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,17 +33,20 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final DownloadSignatureFilter downloadSignatureFilter;
     private final ObjectMapper objectMapper;
     private final String allowedOrigins;
 
     public SecurityConfig(
             JwtAuthFilter jwtAuthFilter,
             RateLimitFilter rateLimitFilter,
+            DownloadSignatureFilter downloadSignatureFilter,
             ObjectMapper objectMapper,
             @Value("${app.cors.allowed-origins}") String allowedOrigins
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimitFilter = rateLimitFilter;
+        this.downloadSignatureFilter = downloadSignatureFilter;
         this.objectMapper = objectMapper;
         this.allowedOrigins = allowedOrigins;
     }
@@ -78,13 +82,13 @@ public class SecurityConfig {
                         // one). Gated instead by X-Twilio-Signature — see TwilioWebhookController.
                         .requestMatchers("/api/interview/twiml/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // File downloads the frontend opens as plain <a href target="_blank">
-                        // links (Jobs.jsx, Candidates.jsx, Dashboard.jsx, Settings.jsx) —
-                        // never through axios, so no bearer token ever reaches these.
-                        // Security here relies on the path containing an unguessable job/
-                        // resume UUID rather than a session check; revisit with signed URLs
-                        // if stricter access control is needed later (see docs/FEATURES.md).
-                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").permitAll()
+                        // File downloads now require signed URLs (with ?exp and ?sig parameters).
+                        // The DownloadSignatureFilter will validate the signature before the
+                        // endpoint is reached. Authenticated users can request signed URLs via
+                        // POST /api/downloads/sign (access control checked per endpoint).
+                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").authenticated()
+                        // Signing endpoint: authenticated, access control checked per path
+                        .requestMatchers(HttpMethod.POST, "/api/downloads/sign").authenticated()
                         // Admin-only areas are decided here, in the filter chain, so a non-admin is
                         // refused (403) before the request body is even parsed or validated — without
                         // this, an employee sending an invalid body got a 400 instead. The
@@ -101,6 +105,8 @@ public class SecurityConfig {
                 )
                 // Right after CORS so a 429 still carries the CORS headers (see RateLimitFilter).
                 .addFilterAfter(rateLimitFilter, CorsFilter.class)
+                // Download signature validation (before JWT so public downloads can be signed)
+                .addFilterAfter(downloadSignatureFilter, RateLimitFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

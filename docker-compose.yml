@@ -29,5 +29,25 @@ services:
       retries: 5
     restart: unless-stopped
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend-classic-app
+    ports:
+      - "8000:8000"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/smartstaff_classic
+      SPRING_DATASOURCE_USERNAME: smartstaff_classic
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-smartstaff_classic_dev}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    # Storage for uploaded files (JDs, resumes)
+    volumes:
+      - ./storage:/app/storage
+
 volumes:
   backend_classic_pg_data:

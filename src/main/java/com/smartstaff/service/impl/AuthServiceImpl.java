@@ -72,6 +72,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse signup(SignupRequest req, boolean requesterIsAdmin) {
+        // Validate password policy: 10+ chars, 1 letter, 1 digit
+        validatePasswordPolicy(req.password());
+
         Role role = parseRole(req.role());
 
         if (role == Role.ADMIN) {
@@ -138,6 +141,48 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Employee not found."));
         user.setStatus(approved ? AccountStatus.APPROVED : AccountStatus.REJECTED);
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(User user, String currentPassword, String newPassword) {
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Current password is incorrect.");
+        }
+
+        // Validate new password policy: 10+ chars, 1 letter, 1 digit
+        if (newPassword.length() < 10) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must be at least 10 characters.");
+        }
+        if (!newPassword.matches(".*[a-zA-Z].*")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must contain at least one letter.");
+        }
+        if (!newPassword.matches(".*\\d.*")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must contain at least one digit.");
+        }
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    private static void validatePasswordPolicy(String password) {
+        if (password.length() < 10) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must be at least 10 characters.");
+        }
+        if (!password.matches(".*[a-zA-Z].*")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must contain at least one letter.");
+        }
+        if (!password.matches(".*\\d.*")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must contain at least one digit.");
+        }
     }
 
     private static String blankToNull(String name, String fallback) {

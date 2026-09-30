@@ -1,5 +1,7 @@
 package com.smartstaff.config;
 
+import com.smartstaff.entity.Role;
+import com.smartstaff.repository.UserRepository;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -14,6 +16,8 @@ import java.util.List;
  *  publicly-known JWT signing key (anyone could mint an admin token) and a
  *  publicly-known encryption key for the stored Gemini/Twilio secrets.
  *
+ *  Also fails startup if any demo account exists in production.
+ *
  *  Not active in local/dev runs (no profile) or in tests. */
 @Component
 @Profile("prod")
@@ -22,19 +26,23 @@ public class ProductionSecretsGuard implements InitializingBean {
     private static final int MIN_JWT_SECRET_LENGTH = 32;
     private static final int MIN_ENCRYPTION_KEY_LENGTH = 24;
     private static final String DEV_DB_PASSWORD = "smartstaff_classic_dev";
+    private static final String DEMO_ADMIN_EMAIL = "admin@viztalent.demo";
 
     private final String jwtSecret;
     private final String encryptionKey;
     private final String dbPassword;
+    private final UserRepository userRepository;
 
     public ProductionSecretsGuard(
             @Value("${app.jwt.secret}") String jwtSecret,
             @Value("${app.encryption.key}") String encryptionKey,
-            @Value("${spring.datasource.password}") String dbPassword
+            @Value("${spring.datasource.password}") String dbPassword,
+            UserRepository userRepository
     ) {
         this.jwtSecret = jwtSecret;
         this.encryptionKey = encryptionKey;
         this.dbPassword = dbPassword;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -62,6 +70,9 @@ public class ProductionSecretsGuard implements InitializingBean {
         }
         if (DEV_DB_PASSWORD.equals(dbPassword)) {
             problems.add("POSTGRES_PASSWORD is unset (still the development default)");
+        }
+        if (userRepository.existsByRoleAndEmailIgnoreCase(Role.ADMIN, DEMO_ADMIN_EMAIL)) {
+            problems.add("Demo admin account (" + DEMO_ADMIN_EMAIL + ") must not exist in production");
         }
         return problems;
     }

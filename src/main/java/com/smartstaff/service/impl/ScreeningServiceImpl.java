@@ -14,6 +14,7 @@ import com.smartstaff.repository.CandidateRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.repository.ResumeRepository;
 import com.smartstaff.service.ScreeningService;
+import com.smartstaff.util.CsvSafetyService;
 import com.smartstaff.util.ExperienceParser;
 import com.smartstaff.util.SkillDictionary;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,7 @@ public class ScreeningServiceImpl implements ScreeningService {
     private final CandidateMapper candidateMapper;
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
+    private final CsvSafetyService csvSafetyService;
 
     public ScreeningServiceImpl(
             JobRepository jobRepository,
@@ -52,7 +54,8 @@ public class ScreeningServiceImpl implements ScreeningService {
             CandidateRepository candidateRepository,
             CandidateMapper candidateMapper,
             SkillDictionary skillDictionary,
-            ExperienceParser experienceParser
+            ExperienceParser experienceParser,
+            CsvSafetyService csvSafetyService
     ) {
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
@@ -60,6 +63,7 @@ public class ScreeningServiceImpl implements ScreeningService {
         this.candidateMapper = candidateMapper;
         this.skillDictionary = skillDictionary;
         this.experienceParser = experienceParser;
+        this.csvSafetyService = csvSafetyService;
     }
 
     @Override
@@ -110,12 +114,9 @@ public class ScreeningServiceImpl implements ScreeningService {
 
     @Override
     public byte[] downloadReportCsv(User requester) {
-        // This endpoint is hit via a plain <a href target="_blank"> link in
-        // the frontend (Dashboard/Candidates/Settings), never through axios,
-        // so it carries no bearer token and `requester` is null — see the
-        // permitAll note in SecurityConfig. With no identity to scope by,
-        // export everything rather than guessing or crashing.
-        List<Job> jobs = (requester == null || requester.getRole() == Role.ADMIN)
+        // Report is scoped by user role: admin sees all jobs, employee sees only their own.
+        // requester is always non-null (endpoint is now authenticated).
+        List<Job> jobs = (requester.getRole() == Role.ADMIN)
                 ? jobRepository.findAllByOrderByCreatedAtDesc()
                 : jobRepository.findByOwnerIdIgnoreCaseOrderByCreatedAtDesc(requester.publicId());
 
@@ -244,9 +245,12 @@ public class ScreeningServiceImpl implements ScreeningService {
         return sb.toString();
     }
 
-    private static String csvCell(String value) {
+    private String csvCell(String value) {
         if (value == null) return "";
+        // First escape for CSV (quote doubling)
         String escaped = value.replace("\"", "\"\"");
-        return "\"" + escaped + "\"";
+        // Then protect against formula injection (prefix =, +, -, @ with ')
+        String safe = csvSafetyService.escapeCsvCell(escaped);
+        return "\"" + safe + "\"";
     }
 }

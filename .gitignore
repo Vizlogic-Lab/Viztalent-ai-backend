@@ -4,9 +4,6 @@ target/
 # Uploaded résumés / JDs and generated job data (contains PII — never commit)
 storage/
 
-# Internal design & feature docs — not part of the shipped backend
-docs/
-
 # IDE
 .idea/
 *.iml
