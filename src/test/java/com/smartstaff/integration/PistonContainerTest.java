@@ -36,7 +36,8 @@ class PistonContainerTest {
 
     private static final GenericContainer<?> PISTON = new GenericContainer<>("ghcr.io/engineer-man/piston")
             .withPrivilegedMode(true)
-            .withTmpFs(Map.of("/tmp", "rw,exec"))
+            // Piston expects its data dir to exist (docker-compose mounts a volume there).
+            .withTmpFs(Map.of("/tmp", "rw,exec", "/piston/packages", "rw,exec"))
             .withEnv("PISTON_OUTPUT_MAX_SIZE", "65536")
             .withEnv("PISTON_RUN_MEMORY_LIMIT", "268435456")
             .withExposedPorts(2000)
