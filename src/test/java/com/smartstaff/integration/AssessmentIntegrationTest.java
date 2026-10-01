@@ -95,6 +95,20 @@ class AssessmentIntegrationTest extends IntegrationTestBase {
         assertThat(key.path("levels").get(2).path("count").asInt()).isZero();
     }
 
+    @Test
+    @DisplayName("status counts actual questions when the assessment has no blueprint (fallback)")
+    void statusCountsQuestionsWithoutBlueprint() throws Exception {
+        // seedReadyAssessment inserts questions but no blueprint, exercising the fallback.
+        seedReadyAssessment(job, "L1", "L2");
+
+        JsonNode s = bodyOf(getAs(admin, "/api/assessment/status/" + job).andExpect(status().isOk()));
+        assertThat(s.path("ready").asBoolean()).isTrue();
+        assertThat(s.path("num_questions").asInt()).isEqualTo(2);
+        assertThat(s.path("counts").path("L1").asInt()).isEqualTo(1);
+        assertThat(s.path("counts").path("L2").asInt()).isEqualTo(1);
+        assertThat(s.path("counts").has("L3")).as("empty levels are omitted in the fallback").isFalse();
+    }
+
     // ── invites ─────────────────────────────────────────────────────────
 
     private JsonNode mint(Object body) throws Exception {

@@ -134,8 +134,14 @@ public class AssessmentServiceImpl implements AssessmentService {
         Assessment a = latest.get();
         Map<String, Integer> counts = new LinkedHashMap<>();
         int total = 0;
-        for (String level : a.getBlueprint().keySet()) {
+        // Normally the levels come from the blueprint. If it's empty (e.g. an
+        // assessment created outside the generator), fall back to the standard
+        // levels and report only those that actually have questions.
+        boolean fromBlueprint = a.getBlueprint() != null && !a.getBlueprint().isEmpty();
+        Collection<String> levels = fromBlueprint ? a.getBlueprint().keySet() : LEVELS;
+        for (String level : levels) {
             int n = (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getId(), level);
+            if (!fromBlueprint && n == 0) continue;
             counts.put(level, n);
             total += n;
         }
