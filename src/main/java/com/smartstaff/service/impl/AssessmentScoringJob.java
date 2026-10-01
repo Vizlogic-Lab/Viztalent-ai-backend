@@ -121,7 +121,7 @@ public class AssessmentScoringJob {
         card.getQuestionScores().clear();
         scorecards.save(card);
 
-        Set<String> levels = new HashSet<>(attempt.getLevels());
+        Set<String> levels = Set.of(attempt.getLevel());
         Map<UUID, AssessmentAnswer> byQuestion = new HashMap<>();
         for (AssessmentAnswer a : answers.findByAttemptId(attemptId)) byQuestion.put(a.getQuestion().getId(), a);
 
@@ -137,7 +137,7 @@ public class AssessmentScoringJob {
                     q.getPrompt(), q.getExpectedComplexity(), List.copyOf(q.getRubric()), List.copyOf(q.getLanguages()),
                     tests,
                     a != null, a == null ? List.of() : List.copyOf(a.getSelectedIndices()),
-                    a == null ? null : a.getCodeLanguage(), a == null ? null : a.getCode(),
+                    a == null ? null : a.getLanguage(), a == null ? null : a.getCode(),
                     a == null ? null : a.getTextAnswer()));
         }
         return new Loaded(card.getId(), settings.getGeminiApiKeyOrNull(), items);

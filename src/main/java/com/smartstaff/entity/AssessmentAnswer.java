@@ -7,16 +7,17 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
-/** A candidate's answer to one question of an attempt. Only the fields for the
- *  question's type are set: selectedIndices for MCQ/MSQ, code+language for the
- *  coding types, textAnswer for SCENARIO/LOGIC/CODE_OUTPUT. */
+/** A candidate's answer to one question of an attempt (table attempt_answers).
+ *  Only the fields for the question's type are set: selectedIndices for
+ *  MCQ/MSQ, code+language for the coding types, textAnswer for
+ *  SCENARIO/LOGIC/CODE_OUTPUT. questionSnapshot is the question exactly as the
+ *  candidate was shown it. The score fields are written by evaluation. */
 @Entity
-@Table(name = "assessment_answers")
+@Table(name = "attempt_answers")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -35,17 +36,36 @@ public class AssessmentAnswer {
     private AssessmentQuestion question;
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "question_snapshot", nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> questionSnapshot = new LinkedHashMap<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "selected_indices", nullable = false, columnDefinition = "jsonb")
     private List<Integer> selectedIndices = new ArrayList<>();
 
-    @Column(name = "code_language", length = 32)
-    private String codeLanguage;
+    @Column(length = 32)
+    private String language;
 
     @Column(columnDefinition = "TEXT")
     private String code;
 
     @Column(name = "text_answer", columnDefinition = "TEXT")
     private String textAnswer;
+
+    @Column(name = "auto_score", precision = 8, scale = 2)
+    private BigDecimal autoScore;
+
+    /** Every rubric run (evaluation double-runs the grader). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rubric_score", columnDefinition = "jsonb")
+    private List<Map<String, Object>> rubricScore;
+
+    @Column(name = "final_score", precision = 8, scale = 2)
+    private BigDecimal finalScore;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false, columnDefinition = "jsonb")
+    private List<Map<String, Object>> evidence = new ArrayList<>();
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();

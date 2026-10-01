@@ -47,19 +47,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final boolean trustForwardedFor;
     private final int authPerMinute;
     private final int tokenPerMinute;
+    private final int runPerMinute;
 
     public RateLimitFilter(
             ObjectMapper objectMapper,
             @Value("${app.rate-limit.enabled}") boolean enabled,
             @Value("${app.rate-limit.trust-forwarded-for}") boolean trustForwardedFor,
             @Value("${app.rate-limit.auth-per-minute}") int authPerMinute,
-            @Value("${app.rate-limit.token-per-minute}") int tokenPerMinute
+            @Value("${app.rate-limit.token-per-minute}") int tokenPerMinute,
+            @Value("${app.rate-limit.run-per-minute:10}") int runPerMinute
     ) {
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.trustForwardedFor = trustForwardedFor;
         this.authPerMinute = authPerMinute;
         this.tokenPerMinute = tokenPerMinute;
+        this.runPerMinute = runPerMinute;
     }
 
     @Override
@@ -71,8 +74,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (enabled) {
             String bucket = bucketFor(request);
             if (bucket != null) {
-                int max = bucket.equals("auth") ? authPerMinute : tokenPerMinute;
-                long retryAfter = limiter.tryAcquire(bucket + ":" + clientAddress(request), max, WINDOW_MILLIS);
+                int max = switch (bucket) {
+                    case "auth" -> authPerMinute;
+                    case "run" -> runPerMinute;
+                    default -> tokenPerMinute;
+                };
+                // Code runs are limited per invite token (one candidate), the rest per client address.
+                String key = bucket.equals("run") ? "run:" + runToken(request.getRequestURI()) : bucket + ":" + clientAddress(request);
+                long retryAfter = limiter.tryAcquire(key, max, WINDOW_MILLIS);
                 if (retryAfter > 0) {
                     log.warn("Rate limit hit on '{}' bucket from {}", bucket, clientAddress(request));
                     response.setStatus(429);
@@ -95,15 +104,29 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && (path.equals("/api/auth/login") || path.equals("/api/auth/signup"))) {
             return "auth";
         }
+        if ("POST".equals(method) && (path.startsWith("/api/assessment/run_by_token/")
+                || (path.startsWith(CANDIDATE) && path.contains("/run/")))) {
+            return "run";
+        }
         if (("GET".equals(method) && path.startsWith("/api/interview/by_token/"))
                 || ("POST".equals(method) && path.startsWith("/api/interview/save_by_token/"))
                 || ("GET".equals(method) && path.startsWith("/api/assessment/by_token/"))
                 || ("POST".equals(method) && (path.startsWith("/api/assessment/save_by_token/")
-                        || path.startsWith("/api/assessment/submit_by_token/")
-                        || path.startsWith("/api/assessment/run_by_token/")))) {
+                        || path.startsWith("/api/assessment/submit_by_token/")))
+                || path.startsWith(CANDIDATE)) {
             return "token";
         }
         return null;
+    }
+
+    private static final String CANDIDATE = "/api/candidate/assessment/";
+
+    /** The invite token segment of a run path. */
+    static String runToken(String path) {
+        String rest = path.startsWith(CANDIDATE) ? path.substring(CANDIDATE.length())
+                : path.substring("/api/assessment/run_by_token/".length());
+        int slash = rest.indexOf('/');
+        return slash < 0 ? rest : rest.substring(0, slash);
     }
 
     private String clientAddress(HttpServletRequest request) {

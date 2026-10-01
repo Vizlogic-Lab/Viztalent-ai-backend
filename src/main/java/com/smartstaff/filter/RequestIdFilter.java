@@ -45,6 +45,11 @@ public class RequestIdFilter extends OncePerRequestFilter {
     private static final String[] SECRET_PATH_PREFIXES = {
             "/api/interview/by_token/",
             "/api/interview/save_by_token/",
+            "/api/candidate/assessment/",
+            "/api/assessment/by_token/",
+            "/api/assessment/save_by_token/",
+            "/api/assessment/submit_by_token/",
+            "/api/assessment/run_by_token/",
     };
 
     @Override

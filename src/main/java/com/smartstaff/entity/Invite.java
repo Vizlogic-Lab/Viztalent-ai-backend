@@ -41,6 +41,10 @@ public class Invite {
     @JoinColumn(name = "interview_id")
     private Interview interview;
 
+    /** The screened candidate's resume, when the invite email matched one of the job's candidates. */
+    @Column(name = "resume_id")
+    private UUID resumeId;
+
     /** The assessment version this invite was minted against (assessment invites). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assessment_id")

@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.rate-limit.trust-forwarded-for=true",
         "app.rate-limit.auth-per-minute=3",
         "app.rate-limit.token-per-minute=2",
+        "app.rate-limit.run-per-minute=2",
 })
 class RateLimitIntegrationTest extends IntegrationTestBase {
 
@@ -116,5 +117,27 @@ class RateLimitIntegrationTest extends IntegrationTestBase {
         login("198.51.100.7", "nobody", "wrong");
 
         login("198.51.100.7, 10.0.0.3", "nobody", "wrong").andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    @DisplayName("candidate code runs have their own bucket, counted per invite token rather than per address")
+    void runBucketIsPerToken() throws Exception {
+        String q = "00000000-0000-0000-0000-000000000001";
+        java.util.function.Function<String, ResultActions> run = tok -> {
+            try {
+                return mvc.perform(post("/api/candidate/assessment/" + tok + "/run/" + q)
+                        .header("X-Forwarded-For", "203.0.113.50")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"language\":\"java\",\"code\":\"x\"}"));
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        // The limiter runs before the controller, so even rejected (unknown-link) runs count.
+        run.apply("token-a").andExpect(status().isBadRequest());
+        run.apply("token-a").andExpect(status().isBadRequest());
+        run.apply("token-a").andExpect(status().isTooManyRequests());
+        // Same address, different invite token: its own budget.
+        run.apply("token-b").andExpect(status().isBadRequest());
     }
 }

@@ -164,13 +164,15 @@ class CandidateAssessmentIntegrationTest extends IntegrationTestBase {
         assertThat(jdbc.queryForObject("select used_at is not null from invites where assessment_id is not null "
                 + "and job_id = ?::uuid", Boolean.class, job)).isTrue();
 
-        // by_token now reports it as already submitted; save and submit are refused.
-        assertThat(byToken().path("status").asText()).isEqualTo("submitted");
+        // A used link now answers like a used interview link: 400 + the same wording.
+        mvc.perform(get("/api/assessment/by_token/" + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("This assessment has already been submitted."));
         postJson("/api/assessment/save_by_token/" + token, Map.of("answers", List.of()))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("already_submitted"));
         postJson("/api/assessment/submit_by_token/" + token, Map.of("answers", List.of()))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("already_submitted"));
     }
 
@@ -196,19 +198,20 @@ class CandidateAssessmentIntegrationTest extends IntegrationTestBase {
                 Map.of("question_id", mcq, "selected_indices", List.of(0))))).andExpect(status().isOk());
 
         // Force the deadline into the past.
-        jdbc.update("update assessment_attempts set deadline = now() - interval '1 minute' where job_id = ?::uuid", job);
+        jdbc.update("update assessment_attempts set deadline_at = now() - interval '1 minute' where job_id = ?::uuid", job);
 
         JsonNode v = byToken();
         assertThat(v.path("status").asText()).isEqualTo("submitted");
         assertThat(v.path("auto_submitted").asBoolean()).isTrue();
         assertThat(v.path("message").asText()).contains("Time is up");
         // The saved answer survived the auto-submit.
-        assertThat(jdbc.queryForObject("select count(*) from assessment_answers a join assessment_attempts t "
+        assertThat(jdbc.queryForObject("select count(*) from attempt_answers a join assessment_attempts t "
                 + "on t.id = a.attempt_id where t.job_id = ?::uuid", Integer.class, job)).isEqualTo(1);
-        // Running after the deadline is refused.
+        // The only level is done, so the link is used up: running is refused.
         postJson("/api/assessment/run_by_token/" + token,
                 Map.of("question_id", mcq, "language", "java", "code", "x"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("already_submitted"));
     }
 
     @Test

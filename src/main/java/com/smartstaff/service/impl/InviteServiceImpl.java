@@ -11,6 +11,7 @@ import com.smartstaff.entity.User;
 import com.smartstaff.exception.ApiException;
 import com.smartstaff.repository.AssessmentQuestionRepository;
 import com.smartstaff.repository.AssessmentRepository;
+import com.smartstaff.repository.CandidateRepository;
 import com.smartstaff.repository.InviteRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.service.InviteService;
@@ -51,15 +52,18 @@ public class InviteServiceImpl implements InviteService {
     private final SettingsService settingsService;
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionRepository assessmentQuestionRepository;
+    private final CandidateRepository candidateRepository;
 
     public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService,
                              AssessmentRepository assessmentRepository,
-                             AssessmentQuestionRepository assessmentQuestionRepository) {
+                             AssessmentQuestionRepository assessmentQuestionRepository,
+                             CandidateRepository candidateRepository) {
         this.jobRepository = jobRepository;
         this.inviteRepository = inviteRepository;
         this.settingsService = settingsService;
         this.assessmentRepository = assessmentRepository;
         this.assessmentQuestionRepository = assessmentQuestionRepository;
+        this.candidateRepository = candidateRepository;
     }
 
     @Override
@@ -114,6 +118,9 @@ public class InviteServiceImpl implements InviteService {
         invite.setKind("ASSESSMENT");
         invite.setJob(job);
         invite.setAssessment(assessment);
+        // Link to the screened candidate's resume when the email matches one of the job's candidates.
+        candidateRepository.findFirstByJobIdAndEmailIgnoreCase(job.getId(), req.candidate_email().trim())
+                .ifPresent(c -> invite.setResumeId(c.getResume().getId()));
         invite.setCandidateEmail(req.candidate_email().trim());
         invite.setCandidateName(req.candidate_name());
         invite.setLevels(levels);

@@ -16,7 +16,8 @@ public record AssessmentRunResponse(
         String compile_error,
         int passed,
         int total,
-        List<VisibleTestResult> tests
+        List<VisibleTestResult> tests,
+        Integer runs_remaining
 ) {
     public record VisibleTestResult(
             int seq,
@@ -29,7 +30,7 @@ public record AssessmentRunResponse(
             Long time_ms
     ) {}
 
-    public static AssessmentRunResponse unavailable(String status, String message) {
-        return new AssessmentRunResponse(false, status, message, null, 0, 0, List.of());
+    public static AssessmentRunResponse unavailable(String status, String message, Integer runsRemaining) {
+        return new AssessmentRunResponse(false, status, message, null, 0, 0, List.of(), runsRemaining);
     }
 }

@@ -1,15 +1,12 @@
 package com.smartstaff.entity;
 
-/** Lifecycle of a candidate's assessment attempt. */
+/** Lifecycle of one level-attempt:
+ *  IN_PROGRESS → SUBMITTED → EVALUATING → EVALUATED → (AWAITING_REVIEW →) VALIDATED.
+ *  EXPIRED is for a link that ran out before the attempt was started. */
 public enum AttemptStatus {
-    /** The candidate is taking it; answers can still be saved. */
-    IN_PROGRESS,
-    /** Finalised — the candidate submitted, or the deadline auto-submitted it. */
-    SUBMITTED,
-    /** Reserved for an attempt abandoned past its deadline with nothing saved
-     *  (currently the deadline path always SUBMITs what was saved). */
-    EXPIRED;
+    IN_PROGRESS, SUBMITTED, EVALUATING, EVALUATED, AWAITING_REVIEW, VALIDATED, EXPIRED;
 
+    /** No more answers can be saved, run or submitted. */
     public boolean isFinal() {
         return this != IN_PROGRESS;
     }

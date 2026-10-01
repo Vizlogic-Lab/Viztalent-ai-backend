@@ -1,24 +1,38 @@
 package com.smartstaff.service;
 
-import com.smartstaff.dto.request.AssessmentRunRequest;
+import com.smartstaff.dto.request.AssessmentAnswerInput;
 import com.smartstaff.dto.request.AssessmentSaveRequest;
+import com.smartstaff.dto.request.AttemptEventsRequest;
+import com.smartstaff.dto.response.AnswerSavedResponse;
 import com.smartstaff.dto.response.AssessmentRunResponse;
+import com.smartstaff.dto.response.AttemptEventsResponse;
 import com.smartstaff.dto.response.CandidateAssessmentResponse;
 
-/** The candidate-facing assessment-taking flow, driven entirely by the invite
- *  token (no login). Mirrors the interview by_token pattern: the link is
- *  consumed only at submit, so the candidate may resume until then. */
+import java.util.UUID;
+
+/** The candidate-facing assessment flow, authorised only by the single-use
+ *  invite token. One attempt per invite level, served in order; the invite is
+ *  consumed when its last level is submitted. */
 public interface CandidateAssessmentService {
 
-    /** Start or resume the attempt for this token. */
-    CandidateAssessmentResponse byToken(String token);
+    /** GET: start the current level on first open, or resume it. */
+    CandidateAssessmentResponse start(String token);
 
-    /** Autosave draft answers without finalising. */
-    CandidateAssessmentResponse save(String token, AssessmentSaveRequest req);
+    /** PUT: autosave one answer of the current level. */
+    AnswerSavedResponse saveAnswer(String token, UUID questionId, AssessmentAnswerInput input);
 
-    /** Finalise: store the answers, consume the invite, mark the attempt submitted. */
+    /** Bulk autosave (the old save_by_token alias). */
+    CandidateAssessmentResponse saveAll(String token, AssessmentSaveRequest req);
+
+    /** POST run: the candidate's code against the VISIBLE tests only (capped per question). */
+    AssessmentRunResponse run(String token, UUID questionId, String language, String code);
+
+    /** POST submit: finish the current level (exactly one concurrent submit wins). */
     CandidateAssessmentResponse submit(String token, AssessmentSaveRequest req);
 
-    /** Run the candidate's code for one question against its VISIBLE tests only. */
-    AssessmentRunResponse run(String token, AssessmentRunRequest req);
+    /** POST events: store integrity events (capped per attempt). */
+    AttemptEventsResponse recordEvents(String token, AttemptEventsRequest req);
+
+    /** Scheduler: submit every in-progress attempt whose deadline has passed. */
+    int autoSubmitOverdue();
 }

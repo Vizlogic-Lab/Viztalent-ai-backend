@@ -86,15 +86,18 @@ public class AssessmentController {
 
     // ── Public, token-based (candidate-facing) ──────────────────────────
 
+    // Aliases kept from before the /api/candidate/assessment/{token} API (F7);
+    // they call the same service so both stay consistent.
+
     @GetMapping("/api/assessment/by_token/{token}")
     public ResponseEntity<CandidateAssessmentResponse> byToken(@PathVariable String token) {
-        return ResponseEntity.ok(candidateAssessmentService.byToken(token));
+        return ResponseEntity.ok(candidateAssessmentService.start(token));
     }
 
     @PostMapping("/api/assessment/save_by_token/{token}")
     public ResponseEntity<CandidateAssessmentResponse> saveByToken(@PathVariable String token,
                                                                     @Valid @RequestBody AssessmentSaveRequest req) {
-        return ResponseEntity.ok(candidateAssessmentService.save(token, req));
+        return ResponseEntity.ok(candidateAssessmentService.saveAll(token, req));
     }
 
     @PostMapping("/api/assessment/submit_by_token/{token}")
@@ -106,6 +109,12 @@ public class AssessmentController {
     @PostMapping("/api/assessment/run_by_token/{token}")
     public ResponseEntity<AssessmentRunResponse> runByToken(@PathVariable String token,
                                                              @Valid @RequestBody AssessmentRunRequest req) {
-        return ResponseEntity.ok(candidateAssessmentService.run(token, req));
+        UUID questionId;
+        try {
+            questionId = UUID.fromString(req.question_id().trim());
+        } catch (IllegalArgumentException e) {
+            throw new com.smartstaff.exception.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Unknown question.");
+        }
+        return ResponseEntity.ok(candidateAssessmentService.run(token, questionId, req.language(), req.code()));
     }
 }

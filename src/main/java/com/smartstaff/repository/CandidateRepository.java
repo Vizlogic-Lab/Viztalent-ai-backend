@@ -19,6 +19,9 @@ public interface CandidateRepository extends JpaRepository<Candidate, UUID> {
      *  frontend only ever sends file_name, not a candidate id. */
     Optional<Candidate> findByJobIdAndResumeFilename(UUID jobId, String filename);
 
+    /** A screened candidate of this job with this email (invite → resume linking). */
+    Optional<Candidate> findFirstByJobIdAndEmailIgnoreCase(UUID jobId, String email);
+
     /** Re-screening deletes a job's candidates and immediately re-inserts them
      *  (one per resume, unique on resume_id) inside one transaction.
      *

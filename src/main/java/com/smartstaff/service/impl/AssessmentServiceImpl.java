@@ -90,24 +90,21 @@ public class AssessmentServiceImpl implements AssessmentService {
     public AssessmentSubmissionsResponse submissions(UUID jobId) {
         List<AssessmentSubmissionsResponse.SubmissionSummary> rows = new ArrayList<>();
         for (AssessmentAttempt a : assessmentAttemptRepository.findByJobIdOrderByStartedAtDesc(jobId)) {
-            int numQuestions = 0;
-            for (String level : a.getLevels()) {
-                numQuestions += (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getAssessment().getId(), level);
-            }
+            int numQuestions = (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getAssessment().getId(), a.getLevel());
             AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(a.getId()).orElse(null);
             rows.add(new AssessmentSubmissionsResponse.SubmissionSummary(
                     a.getId().toString(),
                     a.getCandidateEmail(),
                     a.getCandidateName(),
-                    a.getLevels(),
-                    a.isCombined(),
+                    List.of(a.getLevel()),
+                    a.getInvite().isCombined(),
                     a.getStatus().name(),
                     (int) assessmentAnswerRepository.findByAttemptId(a.getId()).size(),
                     numQuestions,
                     a.getStartedAt(),
                     a.getSubmittedAt(),
                     a.isAutoSubmitted(),
-                    a.getAssessment().getVersion(),
+                    a.getVersion(),
                     card == null ? null : card.getStatus().name(),
                     card == null ? null : card.getPercent(),
                     card == null ? null : card.isPassed(),
@@ -295,7 +292,7 @@ public class AssessmentServiceImpl implements AssessmentService {
                         q.getDetail(), q.getBreakdown()))
                 .toList();
         return new ScorecardResponse(true, card.getStatus().name(), attempt.getId().toString(),
-                attempt.getCandidateEmail(), attempt.getCandidateName(), attempt.getLevels(),
+                attempt.getCandidateEmail(), attempt.getCandidateName(), List.of(attempt.getLevel()),
                 attempt.getAssessment().getVersion(), card.getTotalScore(), card.getMaxScore(), card.getPercent(),
                 card.getPassThreshold(), card.isPassed(), card.isNeedsReview(), card.getReviewPoints(),
                 card.getError(), attempt.getSubmittedAt(), card.getScoredAt(), questions);

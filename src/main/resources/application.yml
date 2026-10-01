@@ -51,6 +51,13 @@ app:
     trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
     auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
     token-per-minute: ${RATE_LIMIT_TOKEN_PER_MINUTE:30}
+    # Candidate "Run code" presses, per invite token (one candidate).
+    run-per-minute: ${RATE_LIMIT_RUN_PER_MINUTE:10}
+  # Candidate assessment-taking (F7).
+  assessment:
+    run-limit-per-question: ${ASSESSMENT_RUN_LIMIT:20}
+    auto-submit-enabled: ${ASSESSMENT_AUTO_SUBMIT:true}
+    auto-submit-interval-ms: 60000
   # Code runner (self-hosted Piston; its URL is saved in Settings).
   runner:
     max-concurrency: ${RUNNER_MAX_CONCURRENCY:8}

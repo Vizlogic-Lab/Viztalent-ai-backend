@@ -88,6 +88,9 @@ class RequestIdFilterTest {
     void redactsInviteTokens() {
         assertThat(RequestIdFilter.redact("/api/interview/by_token/s3cr3t-token")).isEqualTo("/api/interview/by_token/***");
         assertThat(RequestIdFilter.redact("/api/interview/save_by_token/s3cr3t-token")).isEqualTo("/api/interview/save_by_token/***");
+        assertThat(RequestIdFilter.redact("/api/candidate/assessment/s3cr3t/answers/q1")).isEqualTo("/api/candidate/assessment/***");
+        assertThat(RequestIdFilter.redact("/api/assessment/run_by_token/s3cr3t")).isEqualTo("/api/assessment/run_by_token/***");
+        assertThat(RequestIdFilter.redact("/api/assessment/submit_by_token/s3cr3t")).isEqualTo("/api/assessment/submit_by_token/***");
         assertThat(RequestIdFilter.redact("/api/jobs/123")).isEqualTo("/api/jobs/123");
     }
 }
