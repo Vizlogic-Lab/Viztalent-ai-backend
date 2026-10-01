@@ -10,7 +10,9 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** One candidate's run at ONE level of an assessment version. A combined
@@ -83,8 +85,30 @@ public class AssessmentAttempt {
     @Column(name = "overall_score", precision = 5, scale = 2)
     private BigDecimal overallScore;
 
+    /** PROCEED / HR_REVIEW / NOT_RECOMMENDED (F10; provisional until SME sign-off). */
     @Column(length = 24)
     private String recommendation;
+
+    @Column(name = "theory_band", length = 20)
+    private String theoryBand;
+
+    @Column(name = "hands_on_band", length = 20)
+    private String handsOnBand;
+
+    /** Competency name → percent. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "competency_scores", nullable = false, columnDefinition = "jsonb")
+    private Map<String, BigDecimal> competencyScores = new LinkedHashMap<>();
+
+    /** Factual lines built from stored scores only (e.g. "Q7: passed 5 of 12 hidden tests"). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evidence_lines", nullable = false, columnDefinition = "jsonb")
+    private List<String> evidenceLines = new ArrayList<>();
+
+    /** {theory_line, hands_on_line, gaps[], source AI|TEMPLATE}. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> summary;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb")

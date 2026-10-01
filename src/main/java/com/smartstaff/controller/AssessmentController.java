@@ -32,12 +32,6 @@ public class AssessmentController {
         this.questionService = questionService;
     }
 
-    @GetMapping("/api/assessment/submissions/{jobId}")
-    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
-    public ResponseEntity<AssessmentSubmissionsResponse> submissions(@PathVariable UUID jobId) {
-        return ResponseEntity.ok(assessmentService.submissions(jobId));
-    }
-
     @GetMapping("/api/assessment/status/{jobId}")
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
     public ResponseEntity<AssessmentStatusResponse> status(@PathVariable UUID jobId) {

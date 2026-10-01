@@ -24,7 +24,8 @@ class JobAccessGuardTest {
     private final JobRepository jobs = mock(JobRepository.class);
     private final InterviewRepository interviews = mock(InterviewRepository.class);
     private final AssessmentQuestionRepository questions = mock(AssessmentQuestionRepository.class);
-    private final JobAccessGuard guard = new JobAccessGuard(jobs, interviews, questions);
+    private final com.smartstaff.repository.AssessmentAttemptRepository attempts = mock(com.smartstaff.repository.AssessmentAttemptRepository.class);
+    private final JobAccessGuard guard = new JobAccessGuard(jobs, interviews, questions, attempts);
 
     private final UUID jobId = UUID.randomUUID();
     private final UUID interviewId = UUID.randomUUID();

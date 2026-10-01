@@ -87,45 +87,17 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public AssessmentSubmissionsResponse submissions(UUID jobId) {
-        List<AssessmentSubmissionsResponse.SubmissionSummary> rows = new ArrayList<>();
-        for (AssessmentAttempt a : assessmentAttemptRepository.findByJobIdOrderByStartedAtDesc(jobId)) {
-            int numQuestions = (int) assessmentQuestionRepository.countByAssessmentIdAndLevel(a.getAssessment().getId(), a.getLevel());
-            AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(a.getId()).orElse(null);
-            rows.add(new AssessmentSubmissionsResponse.SubmissionSummary(
-                    a.getId().toString(),
-                    a.getCandidateEmail(),
-                    a.getCandidateName(),
-                    List.of(a.getLevel()),
-                    a.getInvite().isCombined(),
-                    a.getStatus().name(),
-                    (int) assessmentAnswerRepository.findByAttemptId(a.getId()).stream().filter(AssessmentServiceImpl::hasContent).count(),
-                    numQuestions,
-                    a.getStartedAt(),
-                    a.getSubmittedAt(),
-                    a.isAutoSubmitted(),
-                    a.getVersion(),
-                    card == null ? null : card.getStatus().name(),
-                    card == null ? null : card.getPercent(),
-                    card == null ? null : card.isPassed(),
-                    card == null ? null : card.isNeedsReview()));
-        }
-        return new AssessmentSubmissionsResponse(true, rows, 50);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public AssessmentStatusResponse status(UUID jobId) {
         Optional<Job> job = jobRepository.findById(jobId);
         if (job.isEmpty()) {
             return new AssessmentStatusResponse(true, false, null, 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null);
         }
         Optional<Assessment> latest = assessmentRepository.findTopByJobIdOrderByVersionDesc(jobId);
         Optional<Assessment> current = assessmentRepository.findByJobIdAndCurrentTrue(jobId);
         if (latest.isEmpty()) {
             return new AssessmentStatusResponse(true, true, job.get().getTitle(), 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null);
         }
 
         Assessment a = latest.get();
@@ -143,13 +115,30 @@ public class AssessmentServiceImpl implements AssessmentService {
             total += n;
         }
         GenerationProgress p = a.getProgress();
+        // F10 result counts across every version: submitted = past IN_PROGRESS;
+        // evaluated = has a (provisional or validated) result; passed = PROCEED.
+        int submitted = 0, evaluated = 0, passed = 0;
+        Instant latestSubmission = null;
+        Map<String, Integer> recommendations = new LinkedHashMap<>();
+        for (String rec : List.of("PROCEED", "HR_REVIEW", "NOT_RECOMMENDED")) recommendations.put(rec, 0);
+        for (AssessmentAttempt at : assessmentAttemptRepository.findByJobIdOrderByStartedAtDesc(jobId)) {
+            if (at.getSubmittedAt() == null) continue;
+            submitted++;
+            if (latestSubmission == null || at.getSubmittedAt().isAfter(latestSubmission)) latestSubmission = at.getSubmittedAt();
+            AttemptStatus st = at.getStatus();
+            if (st == AttemptStatus.EVALUATED || st == AttemptStatus.AWAITING_REVIEW || st == AttemptStatus.VALIDATED) {
+                evaluated++;
+                if (at.getRecommendation() != null) recommendations.merge(at.getRecommendation(), 1, Integer::sum);
+                if ("PROCEED".equals(at.getRecommendation())) passed++;
+            }
+        }
         return new AssessmentStatusResponse(
                 true,
                 true,
                 job.get().getTitle(),
                 total,
-                0,
-                null,
+                submitted,
+                latestSubmission,
                 current.map(c -> assessmentUrl(job.get(), "L1")).orElse(null),
                 a.getStatus() == AssessmentStatus.READY,
                 a.getStatus().inProgress(),
@@ -162,7 +151,10 @@ public class AssessmentServiceImpl implements AssessmentService {
                 p.slotsTotal(),
                 p.slotsDone(),
                 p.unfilled() == null ? List.of() : p.unfilled(),
-                p.errors() == null ? List.of() : p.errors());
+                p.errors() == null ? List.of() : p.errors(),
+                evaluated,
+                passed,
+                recommendations);
     }
 
     @Override
@@ -312,13 +304,6 @@ public class AssessmentServiceImpl implements AssessmentService {
             throw new ApiException(HttpStatus.CONFLICT, "This attempt hasn't been submitted, so there's nothing to score.");
         }
         evaluationJob.rerun(attemptId);
-    }
-
-    /** Evaluation stores a graded row for every question; only rows with content were answered. */
-    private static boolean hasContent(AssessmentAnswer ans) {
-        return !ans.getSelectedIndices().isEmpty()
-                || (ans.getCode() != null && !ans.getCode().isBlank())
-                || (ans.getTextAnswer() != null && !ans.getTextAnswer().isBlank());
     }
 
     private AssessmentAttempt attemptForJob(UUID jobId, UUID attemptId) {

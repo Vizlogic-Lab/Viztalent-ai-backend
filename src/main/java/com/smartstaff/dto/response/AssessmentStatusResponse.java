@@ -31,5 +31,9 @@ public record AssessmentStatusResponse(
         Integer slots_total,
         Integer slots_done,
         List<GenerationProgress.UnfilledSlot> unfilled,
-        List<String> errors
+        List<String> errors,
+        /* F10: attempts with a result, and how many of those are PROCEED. */
+        Integer num_evaluated,
+        Integer num_passed,
+        Map<String, Integer> recommendations
 ) {}

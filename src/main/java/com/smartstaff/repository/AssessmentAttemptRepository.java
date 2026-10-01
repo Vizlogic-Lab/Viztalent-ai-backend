@@ -21,6 +21,13 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
 
     List<AssessmentAttempt> findByJobIdOrderByStartedAtDesc(UUID jobId);
 
+    /** Every attempt across the given jobs (GET /api/assessment/submissions_all). */
+    List<AssessmentAttempt> findByJobIdInOrderByStartedAtDesc(java.util.Collection<UUID> jobIds);
+
+    /** Owner of the attempt's job (JobAccessGuard). */
+    @Query("select a.job.ownerId from AssessmentAttempt a where a.id = :id")
+    Optional<String> findJobOwnerIdById(@Param("id") UUID id);
+
     long countByJobIdAndStatus(UUID jobId, AttemptStatus status);
 
     /** A version that anyone has opened is frozen: its questions can't be edited or regenerated. */

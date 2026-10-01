@@ -2,6 +2,7 @@ package com.smartstaff.security;
 
 import com.smartstaff.entity.Role;
 import com.smartstaff.entity.User;
+import com.smartstaff.repository.AssessmentAttemptRepository;
 import com.smartstaff.repository.AssessmentQuestionRepository;
 import com.smartstaff.repository.InterviewRepository;
 import com.smartstaff.repository.JobRepository;
@@ -33,12 +34,19 @@ public class JobAccessGuard {
     private final JobRepository jobRepository;
     private final InterviewRepository interviewRepository;
     private final AssessmentQuestionRepository questionRepository;
+    private final AssessmentAttemptRepository attemptRepository;
 
     public JobAccessGuard(JobRepository jobRepository, InterviewRepository interviewRepository,
-                          AssessmentQuestionRepository questionRepository) {
+                          AssessmentQuestionRepository questionRepository, AssessmentAttemptRepository attemptRepository) {
         this.jobRepository = jobRepository;
         this.interviewRepository = interviewRepository;
         this.questionRepository = questionRepository;
+        this.attemptRepository = attemptRepository;
+    }
+
+    /** For attempt-scoped endpoints (the F10 review payload). */
+    public boolean canAccessAttempt(UUID attemptId, Authentication auth) {
+        return allowed(attemptId == null ? Optional.empty() : attemptRepository.findJobOwnerIdById(attemptId), auth);
     }
 
     public boolean canAccessJob(UUID jobId, Authentication auth) {

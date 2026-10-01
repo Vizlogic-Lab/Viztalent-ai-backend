@@ -55,6 +55,11 @@ public class Job {
     @Column(name = "nice_to_have_skills", columnDefinition = "jsonb")
     private List<String> niceToHaveSkills = new ArrayList<>();
 
+    /** F10 weights and gates; null = ScoringSettings.DEFAULTS. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scoring_settings", columnDefinition = "jsonb")
+    private ScoringSettings scoringSettings;
+
     @Column(name = "experience_min_years")
     private Integer experienceMinYears;
 

@@ -13,6 +13,8 @@ import com.smartstaff.service.CodeRunnerService.TestResult;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.EvaluationRules;
 import com.smartstaff.util.EvaluationRules.TestOutcome;
+import com.smartstaff.util.ResultNarrator;
+import com.smartstaff.util.ScoringRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,6 +66,9 @@ public class EvaluationJob {
     private final RubricGrader grader;
     private final AssessmentMapper mapper;
     private final ObjectMapper json;
+    private final JobRoleProfileRepository roleProfiles;
+    private final AttemptEventRepository events;
+    private final ResultSummarizer summarizer;
     private final TransactionTemplate tx;
 
     private final double codeWriteTestShare;
@@ -77,6 +82,7 @@ public class EvaluationJob {
                          AssessmentQuestionRepository questions, CodeRunRepository codeRuns,
                          AssessmentScorecardRepository scorecards, SettingsService settings, CodeRunnerService runner,
                          RubricGrader grader, AssessmentMapper mapper, ObjectMapper json,
+                         JobRoleProfileRepository roleProfiles, AttemptEventRepository events, ResultSummarizer summarizer,
                          PlatformTransactionManager transactionManager,
                          @Value("${app.evaluation.code-write-test-share:0.7}") double codeWriteTestShare,
                          @Value("${app.evaluation.rubric-half-below:0.5}") double rubricHalfBelow,
@@ -94,6 +100,9 @@ public class EvaluationJob {
         this.grader = grader;
         this.mapper = mapper;
         this.json = json;
+        this.roleProfiles = roleProfiles;
+        this.events = events;
+        this.summarizer = summarizer;
         this.tx = new TransactionTemplate(transactionManager);
         this.tx.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
         this.codeWriteTestShare = codeWriteTestShare;
@@ -135,7 +144,8 @@ public class EvaluationJob {
     record TestData(int seq, String input, String expected, boolean visible, TestCaseCategory category,
                     BigDecimal weight, BigDecimal tolerance) {}
 
-    record Item(UUID questionId, String level, int seq, QuestionType type, int points, String skill,
+    record Item(UUID questionId, String level, int seq, QuestionType type, Dimension dimension, Competency competency,
+                int points, String skill,
                 List<Integer> correct, String modelAnswer, List<String> keyPoints, String prompt,
                 String expectedComplexity, List<RubricCriterion> rubric, Map<String, String> starter,
                 Map<String, String> reference, List<String> languages, List<TestData> tests,
@@ -159,7 +169,19 @@ public class EvaluationJob {
         for (Item item : snap.items()) {
             results.add(mode == Mode.RETRY_PENDING && !item.pending() ? Graded.keep(item) : grade(item, snap.apiKey()));
         }
-        tx.executeWithoutResult(s -> finish(attemptId, results));
+        ResultNarrator.Facts facts = tx.execute(s -> finish(attemptId, results));
+        if (facts != null) {
+            // The AI summary runs outside any transaction; the template is already stored.
+            Map<String, Object> summary = summarizer.summarize(snap.apiKey(), facts);
+            if ("AI".equals(summary.get("source"))) {
+                tx.executeWithoutResult(s -> attempts.findById(attemptId).ifPresent(a -> {
+                    if (a.getStatus() == AttemptStatus.EVALUATED) {
+                        a.setSummary(summary);
+                        attempts.save(a);
+                    }
+                }));
+            }
+        }
         return true;
     }
 
@@ -202,7 +224,8 @@ public class EvaluationJob {
                             t.getWeight(), t.getFloatTolerance()))
                     .toList();
             AssessmentAnswer ans = byQuestion.get(q.getId());
-            items.add(new Item(q.getId(), q.getLevel(), q.getSeq(), q.getType(), q.getPoints(), q.getSkill(),
+            items.add(new Item(q.getId(), q.getLevel(), q.getSeq(), q.getType(), q.getDimension(), q.getCompetency(),
+                    q.getPoints(), q.getSkill(),
                     List.copyOf(q.getCorrectIndices()), q.getModelAnswer(), List.copyOf(q.getKeyPoints()), q.getPrompt(),
                     q.getExpectedComplexity(), List.copyOf(q.getRubric()), Map.copyOf(q.getStarterCode()),
                     Map.copyOf(q.getReferenceSolution()), List.copyOf(q.getLanguages()), tests,
@@ -429,9 +452,10 @@ public class EvaluationJob {
 
     // ── writing results (one short transaction) ─────────────────────────
 
-    private void finish(UUID attemptId, List<Graded> results) {
+    /** Returns the summary facts when the attempt became EVALUATED, else null. */
+    private ResultNarrator.Facts finish(UUID attemptId, List<Graded> results) {
         AssessmentAttempt a = attempts.findById(attemptId).orElse(null);
-        if (a == null) return;
+        if (a == null) return null;
         Instant now = Instant.now();
 
         boolean pending = results.stream().anyMatch(g -> g.flags().contains("RUBRIC_PENDING") || g.flags().contains("RUNNER_PENDING"));
@@ -468,8 +492,53 @@ public class EvaluationJob {
             a.setNextEvaluationAt(null);
             if (!pending) a.setRubricPendingSince(null);
         }
+        ResultNarrator.Facts facts = a.getStatus() == AttemptStatus.EVALUATED ? result(a, written) : null;
         attempts.save(a);
         project(a, written);
+        return facts;
+    }
+
+    // ── F10: theory vs hands-on result (provisional until SME sign-off) ─
+
+    private ResultNarrator.Facts result(AssessmentAttempt a, List<Graded> results) {
+        boolean technical = roleProfiles.findById(a.getJob().getId())
+                .map(p -> !Boolean.FALSE.equals(p.getIsTechnical())).orElse(true);
+        List<ScoringRules.Scored> scored = new ArrayList<>();
+        List<ResultNarrator.Question> narrated = new ArrayList<>();
+        List<String> weak = new ArrayList<>();
+        Set<String> questionFlags = new HashSet<>();
+        List<Graded> ordered = results.stream().sorted(Comparator.comparingInt(g -> g.item().seq())).toList();
+        for (Graded g : ordered) {
+            Item it = g.item();
+            double earned = g.fin() == null ? 0 : g.fin().doubleValue();
+            scored.add(new ScoringRules.Scored(it.type(), ScoringRules.dimensionFor(it.type(), it.dimension(), technical),
+                    it.competency() != null ? it.competency() : it.type().competency(), earned, it.points()));
+            narrated.add(new ResultNarrator.Question(it.seq(), it.type(), earned, it.points(), g.evidence(), g.flags()));
+            questionFlags.addAll(g.flags());
+        }
+        List<String> lines = ResultNarrator.evidenceLines(narrated);
+        for (int i = 0; i < narrated.size(); i++) {
+            if (narrated.get(i).earned() < narrated.get(i).points() / 2.0) weak.add(lines.get(i));
+        }
+        long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
+        ScoringRules.Result r = ScoringRules.score(scored, a.getJob().getScoringSettings(), questionFlags, tabs);
+
+        a.setTheoryScore(r.theory());
+        a.setHandsOnScore(r.handsOn());
+        a.setOverallScore(r.overall());
+        a.setTheoryBand(r.theoryBand());
+        a.setHandsOnBand(r.handsOnBand());
+        a.setCompetencyScores(new LinkedHashMap<>(r.competencies()));
+        a.setRecommendation(r.recommendation());
+        a.setEvidenceLines(new ArrayList<>(lines));
+        Set<String> flags = new TreeSet<>(a.getFlags());
+        flags.addAll(r.flags());
+        a.setFlags(new ArrayList<>(flags));
+
+        ResultNarrator.Facts facts = new ResultNarrator.Facts(r.theory(), r.handsOn(), r.overall(), r.theoryBand(),
+                r.handsOnBand(), r.recommendation(), List.copyOf(flags), r.competencies(), lines, weak);
+        a.setSummary(ResultNarrator.template(facts));
+        return facts;
     }
 
     private void save(AssessmentAttempt attempt, Graded g) {

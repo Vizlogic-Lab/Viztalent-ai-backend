@@ -61,6 +61,9 @@ public final class PracticalStubs {
         return req -> {
             // Grading calls (F9) have no "skill" in their schema; drafting calls always do.
             JsonNode props = read(req.body()).path("generationConfig").path("responseSchema").path("properties");
+            if (props.has("theory_line")) {
+                return StubResponse.json(200, Fixtures.geminiText(summary(promptOf(req))));
+            }
             if (!props.has("skill")) {
                 return StubResponse.json(200, Fixtures.geminiText(rubricGrade(promptOf(req))));
             }
@@ -76,7 +79,25 @@ public final class PracticalStubs {
     public static volatile GraderMode graderMode = GraderMode.FULL;
     private static final java.util.concurrent.atomic.AtomicInteger GRADER_CALLS = new java.util.concurrent.atomic.AtomicInteger();
 
+    /** How the fake F10 summary behaves: ECHO repeats input numbers; INVENTED adds one that isn't there. */
+    public enum SummaryMode { ECHO, INVENTED }
+
+    public static volatile SummaryMode summaryMode = SummaryMode.ECHO;
+
+    static String summary(String prompt) {
+        Matcher t = Pattern.compile("Theory score: ([0-9.na/]+)").matcher(prompt);
+        Matcher h = Pattern.compile("Hands-on score: ([0-9.na/]+)").matcher(prompt);
+        String theory = t.find() ? t.group(1) : "n/a", handsOn = h.find() ? h.group(1) : "n/a";
+        ObjectNode o = JSON.createObjectNode();
+        o.put("theory_line", "AI: solid concepts, theory " + theory + ".");
+        o.put("hands_on_line", summaryMode == SummaryMode.INVENTED ? "AI: hands-on 97.3 out of 100."
+                : "AI: hands-on " + handsOn + ".");
+        o.putArray("gaps").add("AI gap");
+        return o.toString();
+    }
+
     public static void resetGrader() {
+        summaryMode = SummaryMode.ECHO;
         graderMode = GraderMode.FULL;
         GRADER_CALLS.set(0);
     }

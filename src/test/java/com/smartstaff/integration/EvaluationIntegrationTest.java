@@ -87,6 +87,11 @@ class EvaluationIntegrationTest extends IntegrationTestBase {
                 + "rubric_pending_since, evaluation_tries from assessment_attempts where job_id = ?::uuid", job);
     }
 
+    /** Gemini grading calls only (the F10 result summary is a separate call). */
+    private long graderCalls() {
+        return STUB.requests("/v1beta/models/").stream().filter(r -> !r.body().contains("theory_line")).count();
+    }
+
     private double num(Object o) {
         return ((Number) o).doubleValue();
     }
@@ -198,7 +203,7 @@ class EvaluationIntegrationTest extends IntegrationTestBase {
     void hardcoded() throws Exception {
         open("L1");
         String write = q("CODE_WRITE");
-        int before = STUB.requests("/v1beta/models/").size();
+        long before = graderCalls();
         answer(write, Map.of("language", "java", "code",
                 "public class Main { public static void main(String[] a) { System.out.println(3); } } // REFERENCE"));
         submit();
@@ -206,7 +211,7 @@ class EvaluationIntegrationTest extends IntegrationTestBase {
         assertThat(num(row(write).get("final_score"))).isZero();
         assertThat((String) row(write).get("flags")).contains("HARDCODED");
         assertThat((String) attempt().get("flags")).contains("HARDCODED");
-        assertThat(STUB.requests("/v1beta/models/").size()).isEqualTo(before);
+        assertThat(graderCalls()).isEqualTo(before);
     }
 
     @Test
@@ -288,7 +293,7 @@ class EvaluationIntegrationTest extends IntegrationTestBase {
         assertThat((String) r.get("evidence")).contains("KP1");
 
         // Another candidate leaves it blank.
-        int before = STUB.requests("/v1beta/models/").size();
+        long before = graderCalls();
         JsonNode mint = bodyOf(postJsonAs(admin, "/api/invites/mint",
                 Map.of("session_id", job, "candidate_email", "blank@example.com", "levels", List.of("L2"))).andExpect(status().isOk()));
         String url = mint.path("invites").get(0).path("url").asText();
@@ -298,6 +303,6 @@ class EvaluationIntegrationTest extends IntegrationTestBase {
 
         assertThat(jdbc.queryForObject("select a.final_score from attempt_answers a join assessment_attempts t on t.id = a.attempt_id "
                 + "where t.candidate_email = 'blank@example.com' and a.question_id = ?::uuid", Double.class, scenario)).isZero();
-        assertThat(STUB.requests("/v1beta/models/").size()).as("no grader call for empty answers").isEqualTo(before);
+        assertThat(graderCalls()).as("no grader call for empty answers").isEqualTo(before);
     }
 }
