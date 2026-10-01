@@ -99,6 +99,21 @@ class QuestionBankFileParserTest {
     }
 
     @Test
+    @DisplayName("the shipped sample file parses into exactly one question of every type, with no warnings")
+    void sampleFileCoversEveryType() throws IOException {
+        byte[] bytes = new org.springframework.core.io.ClassPathResource("samples/question-bank-sample.json").getContentAsByteArray();
+        var result = parser.parse(bytes, "question-bank-sample.json");
+
+        assertThat(result.warnings()).isEmpty();
+        assertThat(result.questions()).extracting(QuestionBankFileParser.ParsedQuestion::type)
+                .containsExactlyInAnyOrder("MCQ", "MSQ", "CODE_WRITE", "CODE_DEBUG", "CODE_OUTPUT", "SCENARIO", "LOGIC");
+        var write = result.questions().stream().filter(q -> q.type().equals("CODE_WRITE")).findFirst().orElseThrow();
+        assertThat(write.question().getTestCases()).hasSize(11);
+        assertThat(write.question().getLanguages()).containsExactly("python", "java");
+        assertThat(write.naiveSolution()).containsKey("python");
+    }
+
+    @Test
     @DisplayName("unsupported extensions and non-array JSON are rejected with a clear error")
     void rejections() {
         assertThatThrownBy(() -> parser.parse(new byte[0], "bank.pdf")).isInstanceOf(IOException.class).hasMessageContaining("Unsupported");

@@ -5,6 +5,9 @@ import com.smartstaff.dto.response.QuestionUploadResultResponse;
 import com.smartstaff.dto.response.SimpleResponse;
 import com.smartstaff.entity.User;
 import com.smartstaff.service.QuestionBankService;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.UUID;
 
 @RestController
@@ -22,6 +26,18 @@ public class QuestionBankController {
 
     public QuestionBankController(QuestionBankService questionBankService) {
         this.questionBankService = questionBankService;
+    }
+
+    /** The documented JSON format with one question per type — HR starts from
+     *  this to author practical (coding) questions. */
+    @GetMapping("/sample")
+    public ResponseEntity<byte[]> sample() throws IOException {
+        byte[] body = new ClassPathResource("samples/question-bank-sample.json").getContentAsByteArray();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename("question-bank-sample.json").build().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 
     @GetMapping("/bank")

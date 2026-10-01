@@ -128,6 +128,53 @@ class QuestionBankPracticalIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("GET /api/questions/sample downloads the documented sample file")
+    void sampleDownload() throws Exception {
+        var res = getAs(admin, "/api/questions/sample").andExpect(status().isOk()).andReturn().getResponse();
+        assertThat(res.getHeader("Content-Disposition")).contains("question-bank-sample.json");
+        JsonNode sample = json.readTree(res.getContentAsString());
+        assertThat(sample.isArray()).isTrue();
+        assertThat(sample).hasSize(7);
+    }
+
+    @Test
+    @DisplayName("uploading the sample: theory/written/output questions are stored; coding ones are proven in the sandbox")
+    void uploadSample() throws Exception {
+        byte[] bytes = new org.springframework.core.io.ClassPathResource("samples/question-bank-sample.json").getContentAsByteArray();
+        JsonNode result = bodyOf(uploadFile(admin, "/api/questions/upload", "file", "question-bank-sample.json",
+                new String(bytes, java.nio.charset.StandardCharsets.UTF_8)).andExpect(status().isOk()));
+
+        // The fake runner doesn't execute real code, so the two real-code coding
+        // questions fail their sandbox proof here (they pass against a real Piston).
+        assertThat(result.path("added").asInt()).isEqualTo(5);
+        assertThat(jdbc.queryForList("select type from question_bank_items", String.class))
+                .containsExactlyInAnyOrder("MCQ", "MSQ", "CODE_OUTPUT", "SCENARIO", "LOGIC");
+        assertThat(result.path("warnings")).anySatisfy(w -> assertThat(w.asText()).contains("CODE_WRITE"));
+    }
+
+    @Test
+    @DisplayName("a Java job never receives a Python-only coding question from the bank")
+    void javaJobNeverGetsPythonOnlyCodingQuestion() throws Exception {
+        // Same proven item, but Python-only.
+        String pythonOnly = JSON_BANK.replace("\"languages\": [\"java\"]", "\"languages\": [\"python\"]")
+                .replace("{\"java\": \"// STARTER\"}", "{\"python\": \"# STARTER\"}")
+                .replace("{\"java\": \"// REFERENCE\"}", "{\"python\": \"# REFERENCE\"}")
+                .replace("{\"java\": \"// NAIVE\"}", "{\"python\": \"# NAIVE\"}")
+                .replace("{\"java\": \"// BADREF\"}", "{\"python\": \"# BADREF\"}");
+        uploadFile(admin, "/api/questions/upload", "file", "bank.json", pythonOnly).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select count(*) from question_bank_items where type = 'CODE_WRITE' and validated",
+                Integer.class)).as("the python-only item is a valid bank question").isEqualTo(1);
+
+        String job = createJob(admin, "Java Backend Developer", "java, spring, sql");
+        setPublicBaseUrl(admin, "https://public.example.com");
+        postJsonAs(admin, "/api/assessment/generate",
+                Map.of("session_id", job, "question_source", "custom", "levels", List.of("L1"))).andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject("select count(*) from assessment_questions q join assessments a on a.id = q.assessment_id "
+                + "where a.job_id = ?::uuid and q.type = 'CODE_WRITE'", Integer.class, job)).isZero();
+    }
+
+    @Test
     @DisplayName("a bank item restricted to another role family is not offered to this role")
     void roleFamilyFiltersBankItems() throws Exception {
         // Same item but restricted to DATA; a BACKEND job must not receive it.
