@@ -6,6 +6,8 @@ import com.smartstaff.repository.AssessmentAttemptRepository;
 import com.smartstaff.repository.AssessmentQuestionRepository;
 import com.smartstaff.repository.InterviewRepository;
 import com.smartstaff.repository.JobRepository;
+import com.smartstaff.repository.JobReviewerRepository;
+import com.smartstaff.repository.SmeReviewRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -35,18 +37,53 @@ public class JobAccessGuard {
     private final InterviewRepository interviewRepository;
     private final AssessmentQuestionRepository questionRepository;
     private final AssessmentAttemptRepository attemptRepository;
+    private final JobReviewerRepository jobReviewers;
+    private final SmeReviewRepository reviews;
 
     public JobAccessGuard(JobRepository jobRepository, InterviewRepository interviewRepository,
-                          AssessmentQuestionRepository questionRepository, AssessmentAttemptRepository attemptRepository) {
+                          AssessmentQuestionRepository questionRepository, AssessmentAttemptRepository attemptRepository,
+                          JobReviewerRepository jobReviewers, SmeReviewRepository reviews) {
         this.jobRepository = jobRepository;
         this.interviewRepository = interviewRepository;
         this.questionRepository = questionRepository;
         this.attemptRepository = attemptRepository;
+        this.jobReviewers = jobReviewers;
+        this.reviews = reviews;
     }
 
-    /** For attempt-scoped endpoints (the F10 review payload). */
+    /** For attempt-scoped endpoints (the F10 review payload): the job's HR owner,
+     *  an admin, or a reviewer assigned to the job (F11). */
     public boolean canAccessAttempt(UUID attemptId, Authentication auth) {
+        if (attemptId != null && auth != null && auth.getPrincipal() instanceof User u && u.getRole() == Role.REVIEWER) {
+            return attemptRepository.findJobIdById(attemptId).map(jobId -> assigned(jobId, u)).orElse(true);
+        }
         return allowed(attemptId == null ? Optional.empty() : attemptRepository.findJobOwnerIdById(attemptId), auth);
+    }
+
+    /** F11: admin, or a reviewer assigned to the job. Not the HR owner: this
+     *  guards the SME's own actions. */
+    public boolean canReview(UUID jobId, Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) return false;
+        if (user.getRole() == Role.ADMIN) return true;
+        return user.getRole() == Role.REVIEWER && jobId != null && assigned(jobId, user);
+    }
+
+    /** canReview for the job a review row belongs to (unknown review: let the service 404). */
+    public boolean canReviewReview(UUID reviewId, Authentication auth) {
+        if (reviewId == null) return true;
+        return reviews.findById(reviewId).map(r -> canReview(r.getJobId(), auth)).orElse(true);
+    }
+
+    /** Read access to a job's results: its owner/admin, or an assigned reviewer. */
+    public boolean canReadResults(UUID jobId, Authentication auth) {
+        if (auth != null && auth.getPrincipal() instanceof User u && u.getRole() == Role.REVIEWER) {
+            return jobId != null && assigned(jobId, u);
+        }
+        return canAccessJob(jobId, auth);
+    }
+
+    private boolean assigned(UUID jobId, User reviewer) {
+        return jobReviewers.existsByJobIdAndUserId(jobId, reviewer.getId());
     }
 
     public boolean canAccessJob(UUID jobId, Authentication auth) {
@@ -77,7 +114,9 @@ public class JobAccessGuard {
     private static boolean allowed(Optional<String> ownerId, Authentication auth) {
         if (ownerId.isEmpty()) return true;
         if (auth == null || !(auth.getPrincipal() instanceof User user)) return false;
-        return user.getRole() == Role.ADMIN || ownerId.get().equalsIgnoreCase(user.publicId());
+        if (user.getRole() == Role.ADMIN) return true;
+        // A reviewer never owns a job, even if their email matches an owner id.
+        return user.getRole() == Role.USER && ownerId.get().equalsIgnoreCase(user.publicId());
     }
 
     private static UUID parseOrNull(String value) {

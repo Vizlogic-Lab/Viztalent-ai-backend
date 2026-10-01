@@ -114,6 +114,10 @@ public class AssessmentAttempt {
     @Column(nullable = false, columnDefinition = "jsonb")
     private List<String> flags = new ArrayList<>();
 
+    /** Set when the attempt was validated without an SME (e.g. "sampling"). */
+    @Column(name = "validation_reason", length = 32)
+    private String validationReason;
+
     @Column(name = "evaluation_started_at")
     private Instant evaluationStartedAt;
 

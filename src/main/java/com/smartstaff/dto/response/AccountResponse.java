@@ -3,6 +3,7 @@ package com.smartstaff.dto.response;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.Instant;
+import java.util.List;
 
 /** The account shape the frontend reads everywhere (App.jsx checks
  *  account.role === 'admin', Sidebar shows employee_id, Employees page
@@ -18,5 +19,6 @@ public record AccountResponse(
         Boolean approved,
         Instant last_seen_at,
         Instant last_login_at,
-        Instant created_at
+        Instant created_at,
+        List<String> reviewer_skills
 ) {}

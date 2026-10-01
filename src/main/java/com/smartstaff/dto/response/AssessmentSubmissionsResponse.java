@@ -9,7 +9,7 @@ import java.util.List;
 /** GET /api/assessment/submissions/{jobId} and /submissions_all — one row per
  *  level-attempt. The F10 result fields (scores, bands, recommendation) are set
  *  once the attempt is EVALUATED; result_status is PROVISIONAL until SME
- *  sign-off (F12). score_status/percent/passed/needs_review are the legacy
+ *  sign-off (F12); review_status is the SME review's status when one exists. score_status/percent/passed/needs_review are the legacy
  *  scorecard projection, kept for the current Results page. */
 public record AssessmentSubmissionsResponse(boolean ok, List<SubmissionSummary> submissions, int pass_threshold) {
 
@@ -42,7 +42,13 @@ public record AssessmentSubmissionsResponse(boolean ok, List<SubmissionSummary> 
             String score_status,
             BigDecimal percent,
             Boolean passed,
-            Boolean needs_review
+            Boolean needs_review,
+            // F12: who validated it, when, and what they said ("sampling" = validated without an SME).
+            String review_id,
+            String reviewer_name,
+            Instant signed_off_at,
+            String sme_comment,
+            String validation_reason
     ) {}
 
     public static AssessmentSubmissionsResponse empty() {

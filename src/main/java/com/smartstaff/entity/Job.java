@@ -60,6 +60,11 @@ public class Job {
     @Column(name = "scoring_settings", columnDefinition = "jsonb")
     private ScoringSettings scoringSettings;
 
+    /** F11 review policy (null = ReviewPolicy.DEFAULTS). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "review_policy", columnDefinition = "jsonb")
+    private ReviewPolicy reviewPolicy;
+
     @Column(name = "experience_min_years")
     private Integer experienceMinYears;
 

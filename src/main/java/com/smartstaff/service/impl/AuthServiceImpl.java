@@ -39,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
 
     private Role parseRole(String raw) {
         if ("admin".equalsIgnoreCase(raw)) return Role.ADMIN;
+        if ("reviewer".equalsIgnoreCase(raw)) return Role.REVIEWER;
         if ("user".equalsIgnoreCase(raw) || "employee".equalsIgnoreCase(raw)) return Role.USER;
         throw new ApiException(HttpStatus.BAD_REQUEST, "Unknown role: " + raw);
     }
@@ -47,14 +48,17 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse login(LoginRequest req) {
         Role role = parseRole(req.role());
-        Optional<User> found = role == Role.ADMIN
-                ? userRepository.findByRoleAndEmailIgnoreCase(Role.ADMIN, req.identifier())
+        Optional<User> found = role != Role.USER
+                ? userRepository.findByRoleAndEmailIgnoreCase(role, req.identifier())
                 : userRepository.findByRoleAndEmployeeIdIgnoreCase(Role.USER, req.identifier());
 
         User user = found.orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Incorrect credentials."));
 
         if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Incorrect credentials.");
+        }
+        if (role == Role.REVIEWER && user.getStatus() != AccountStatus.APPROVED) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "This reviewer account is disabled.", "account_disabled");
         }
         if (role == Role.USER && user.getStatus() != AccountStatus.APPROVED) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Your account is awaiting admin approval.", "pending_approval");
@@ -81,7 +85,30 @@ public class AuthServiceImpl implements AuthService {
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Only an existing admin can create an admin account.", "admin_only");
         }
+        // F11: reviewer (SME) accounts are created by an admin only, from the Employees page.
+        if (role == Role.REVIEWER && !requesterIsAdmin) {
+            throw new ApiException(HttpStatus.FORBIDDEN,
+                    "Only an admin can create a reviewer account.", "admin_only");
+        }
         validatePasswordPolicy(req.password());
+
+        if (role == Role.REVIEWER) {
+            if (req.email() == null || req.email().isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Email is required for a reviewer account.");
+            }
+            if (userRepository.existsByRoleAndEmailIgnoreCase(Role.REVIEWER, req.email())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "A reviewer with that email already exists.");
+            }
+            User reviewer = new User(Role.REVIEWER, blankToNull(req.name(), req.email()), req.email().trim(), null,
+                    passwordEncoder.encode(req.password()), AccountStatus.APPROVED);
+            if (req.reviewer_skills() != null) {
+                reviewer.setReviewerSkills(req.reviewer_skills().stream().filter(x -> x != null && !x.isBlank())
+                        .map(String::trim).distinct().toList());
+            }
+            userRepository.save(reviewer);
+            // No token: the admin stays signed in as themselves.
+            return AuthResponse.created(userMapper.toAccountResponse(reviewer), "Reviewer account created.");
+        }
 
         if (role == Role.ADMIN) {
             if (req.email() == null || req.email().isBlank()) {
@@ -129,7 +156,8 @@ public class AuthServiceImpl implements AuthService {
         return new AccountsResponse(
                 true,
                 userRepository.findByRoleOrderByNameAsc(Role.ADMIN).stream().map(userMapper::toAccountResponse).toList(),
-                userRepository.findByRoleOrderByNameAsc(Role.USER).stream().map(userMapper::toAccountResponse).toList()
+                userRepository.findByRoleOrderByNameAsc(Role.USER).stream().map(userMapper::toAccountResponse).toList(),
+                userRepository.findByRoleOrderByNameAsc(Role.REVIEWER).stream().map(userMapper::toAccountResponse).toList()
         );
     }
 

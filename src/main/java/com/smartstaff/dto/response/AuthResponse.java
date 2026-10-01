@@ -18,6 +18,11 @@ public record AuthResponse(
         return new AuthResponse(true, token, account, null, null, null);
     }
 
+    /** An account created on someone else's behalf (no token for the creator). */
+    public static AuthResponse created(AccountResponse account, String message) {
+        return new AuthResponse(true, null, account, null, message, null);
+    }
+
     public static AuthResponse pendingApproval(AccountResponse account, String message) {
         return new AuthResponse(true, null, account, true, message, null);
     }

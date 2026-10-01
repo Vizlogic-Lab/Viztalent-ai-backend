@@ -6,6 +6,8 @@ import com.smartstaff.entity.AccountStatus;
 import com.smartstaff.entity.User;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class UserMapper {
 
@@ -19,7 +21,8 @@ public class UserMapper {
                 u.getRole() == Role.USER ? u.getStatus() == AccountStatus.APPROVED : null,
                 u.getLastSeenAt(),
                 u.getLastLoginAt(),
-                u.getCreatedAt()
+                u.getCreatedAt(),
+                u.getRole() == Role.REVIEWER ? List.copyOf(u.getReviewerSkills()) : null
         );
     }
 }

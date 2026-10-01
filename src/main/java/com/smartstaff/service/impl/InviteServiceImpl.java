@@ -53,11 +53,13 @@ public class InviteServiceImpl implements InviteService {
     private final AssessmentRepository assessmentRepository;
     private final AssessmentQuestionRepository assessmentQuestionRepository;
     private final CandidateRepository candidateRepository;
+    private final ReviewRouter reviewRouter;
 
     public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService,
                              AssessmentRepository assessmentRepository,
                              AssessmentQuestionRepository assessmentQuestionRepository,
-                             CandidateRepository candidateRepository) {
+                             CandidateRepository candidateRepository, ReviewRouter reviewRouter) {
+        this.reviewRouter = reviewRouter;
         this.jobRepository = jobRepository;
         this.inviteRepository = inviteRepository;
         this.settingsService = settingsService;
@@ -87,6 +89,7 @@ public class InviteServiceImpl implements InviteService {
                 .filter(a -> a.getStatus() == AssessmentStatus.READY)
                 .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
                         "There is no ready assessment for this job yet — generate one first.", "no_ready_assessment"));
+        reviewRouter.requireApproved(assessment);
         for (String level : levels) {
             if (assessmentQuestionRepository.countByAssessmentIdAndLevel(assessment.getId(), level) == 0) {
                 throw new ApiException(HttpStatus.CONFLICT,

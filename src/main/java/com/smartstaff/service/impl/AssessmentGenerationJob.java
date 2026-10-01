@@ -49,12 +49,14 @@ public class AssessmentGenerationJob {
     private final CodeRunnerService runner;
     private final QuestionDrafter drafter;
     private final QuestionValidator validator;
+    private final ReviewRouter reviewRouter;
     private final TransactionTemplate tx;
 
     public AssessmentGenerationJob(AssessmentRepository assessments, AssessmentQuestionRepository questions,
                                    JobRepository jobs, JobRoleProfileRepository profiles, QuestionBankItemRepository bank,
                                    SettingsService settings, CodeRunnerService runner, QuestionDrafter drafter,
-                                   QuestionValidator validator, PlatformTransactionManager transactionManager) {
+                                   QuestionValidator validator, ReviewRouter reviewRouter,
+                                   PlatformTransactionManager transactionManager) {
         this.assessments = assessments;
         this.questions = questions;
         this.jobs = jobs;
@@ -64,6 +66,7 @@ public class AssessmentGenerationJob {
         this.runner = runner;
         this.drafter = drafter;
         this.validator = validator;
+        this.reviewRouter = reviewRouter;
         this.tx = new TransactionTemplate(transactionManager);
         // REQUIRES_NEW: when run inline after the queuing commit, that finished
         // transaction is still bound to the thread and would swallow writes.
@@ -462,6 +465,7 @@ public class AssessmentGenerationJob {
                 a.setGeneratedAt(Instant.now());
                 a.setCurrent(true);
                 a.setError(null);
+                reviewRouter.questionSetReady(a);   // F12: SME approval before invites, if the job asks for it
             });
         });
     }

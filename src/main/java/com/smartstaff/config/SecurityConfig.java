@@ -89,7 +89,7 @@ public class SecurityConfig {
                         // Downloads need either a bearer token or a signed URL (see
                         // DownloadSignatureFilter, which authenticates signed requests
                         // as the user who signed them). POST /api/downloads/sign issues them.
-                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").hasAnyRole("ADMIN", "USER")
                         // Admin-only areas are decided here, in the filter chain, so a non-admin is
                         // refused (403) before the request body is even parsed or validated — without
                         // this, an employee sending an invalid body got a 400 instead. The
@@ -98,7 +98,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/accounts", "/api/auth/approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/questions/upload", "/api/questions/clear").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/questions/upload/*").hasRole("ADMIN")
-                        .anyRequest().authenticated()
+                        // F11: a REVIEWER (SME) gets only what is listed here; the guards
+                        // (@jobAccess.canReview / canReadResults / canAccessAttempt) narrow it
+                        // further to assigned jobs. Everything else is HR/admin only.
+                        .requestMatchers("/api/auth/me", "/api/auth/logout", "/api/auth/change_password").authenticated()
+                        .requestMatchers("/api/review/**").hasAnyRole("ADMIN", "REVIEWER")
+                        .requestMatchers(HttpMethod.GET, "/api/assessment/submissions/*", "/api/assessment/attempts/*").authenticated()
+                        .anyRequest().hasAnyRole("ADMIN", "USER")
                 )
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint((request, response, ex) -> writeJsonError(response, HttpStatus.UNAUTHORIZED, "Authentication required."))

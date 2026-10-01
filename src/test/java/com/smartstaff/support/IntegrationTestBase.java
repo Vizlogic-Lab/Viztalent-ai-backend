@@ -120,6 +120,11 @@ public abstract class IntegrationTestBase {
                 passwordEncoder.encode("Passw0rd!"), status));
     }
 
+    /** A bearer token for an account created some other way (e.g. through the API). */
+    protected Account tokenFor(User user) {
+        return new Account(user, jwtService.issueToken(user.getId(), user.getRole().name()));
+    }
+
     private Account account(User user) {
         User saved = users.save(user);
         return new Account(saved, jwtService.issueToken(saved.getId(), saved.getRole().name()));

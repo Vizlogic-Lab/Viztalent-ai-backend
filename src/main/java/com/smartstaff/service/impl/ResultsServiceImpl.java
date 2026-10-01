@@ -23,10 +23,15 @@ public class ResultsServiceImpl implements ResultsService {
     private final AssessmentScorecardRepository scorecards;
     private final CodeRunRepository codeRuns;
     private final AttemptEventRepository events;
+    private final SmeReviewRepository reviews;
+    private final UserRepository users;
 
     public ResultsServiceImpl(JobRepository jobs, AssessmentAttemptRepository attempts, AssessmentAnswerRepository answers,
                               AssessmentQuestionRepository questions, AssessmentScorecardRepository scorecards,
-                              CodeRunRepository codeRuns, AttemptEventRepository events) {
+                              CodeRunRepository codeRuns, AttemptEventRepository events, SmeReviewRepository reviews,
+                              UserRepository users) {
+        this.reviews = reviews;
+        this.users = users;
         this.jobs = jobs;
         this.attempts = attempts;
         this.answers = answers;
@@ -59,6 +64,9 @@ public class ResultsServiceImpl implements ResultsService {
         int numQuestions = (int) questions.countByAssessmentIdAndLevel(a.getAssessment().getId(), a.getLevel());
         AssessmentScorecard card = scorecards.findByAttemptId(a.getId()).orElse(null);
         boolean scored = hasResult(a.getStatus());
+        SmeReview review = reviews.findBySubjectTypeAndSubjectId(SmeReview.Subject.ATTEMPT, a.getId()).orElse(null);
+        String reviewer = review == null || review.getReviewerId() == null ? null
+                : users.findById(review.getReviewerId()).map(User::getName).orElse(null);
         return new SubmissionSummary(
                 a.getId().toString(),
                 a.getJob().getId().toString(),
@@ -83,11 +91,16 @@ public class ResultsServiceImpl implements ResultsService {
                 scored ? a.getRecommendation() : null,
                 List.copyOf(a.getFlags()),
                 resultStatus(a.getStatus()),
-                reviewStatus(a.getStatus()),
+                review != null ? review.getStatus().name() : reviewStatus(a.getStatus()),
                 card == null ? null : card.getStatus().name(),
                 card == null ? null : card.getPercent(),
                 card == null ? null : card.isPassed(),
-                card == null ? null : card.isNeedsReview());
+                card == null ? null : card.isNeedsReview(),
+                review == null ? null : review.getId().toString(),
+                reviewer,
+                review == null ? null : review.getSignedOffAt(),
+                review == null ? null : review.getComment(),
+                a.getValidationReason());
     }
 
     private static boolean hasResult(AttemptStatus s) {
@@ -143,6 +156,8 @@ public class ResultsServiceImpl implements ResultsService {
                     ans == null ? null : ans.getTextAnswer(),
                     ans == null ? null : ans.getAutoScore(),
                     ans == null ? null : ans.getFinalScore(),
+                    ans == null ? null : ans.getSmeScore(),
+                    ans == null ? null : ans.getSmeReason(),
                     ans == null ? List.of() : ans.getFlags(),
                     ans == null ? List.of() : ans.getEvidence(),
                     ans == null ? null : ans.getRubricScore(),

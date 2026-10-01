@@ -300,7 +300,12 @@ public class AssessmentServiceImpl implements AssessmentService {
     public void rescore(UUID jobId, UUID attemptId) {
         AssessmentAttempt attempt = transaction.execute(s -> attemptForJob(jobId, attemptId));
         if (attempt == null || !(attempt.getStatus() == AttemptStatus.SUBMITTED
-                || attempt.getStatus() == AttemptStatus.EVALUATING || attempt.getStatus() == AttemptStatus.EVALUATED)) {
+                || attempt.getStatus() == AttemptStatus.EVALUATING || attempt.getStatus() == AttemptStatus.EVALUATED
+                || attempt.getStatus() == AttemptStatus.AWAITING_REVIEW)) {
+            if (attempt != null && attempt.getStatus() == AttemptStatus.VALIDATED) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        "This result has been validated and is locked; an admin must reopen the review first.", "result_locked");
+            }
             throw new ApiException(HttpStatus.CONFLICT, "This attempt hasn't been submitted, so there's nothing to score.");
         }
         evaluationJob.rerun(attemptId);

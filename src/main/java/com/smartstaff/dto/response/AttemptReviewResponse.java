@@ -38,6 +38,8 @@ public record AttemptReviewResponse(
             String text_answer,
             BigDecimal auto_score,
             BigDecimal final_score,
+            BigDecimal sme_score,
+            String sme_reason,
             List<String> flags,
             List<Map<String, Object>> evidence,
             List<Map<String, Object>> rubric_runs,

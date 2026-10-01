@@ -72,6 +72,13 @@ public class AssessmentAnswer {
     @Column(nullable = false, columnDefinition = "jsonb")
     private List<String> flags = new ArrayList<>();
 
+    /** F12: the SME's adjusted score (null = not adjusted) and why. */
+    @Column(name = "sme_score", precision = 6, scale = 2)
+    private BigDecimal smeScore;
+
+    @Column(name = "sme_reason", columnDefinition = "TEXT")
+    private String smeReason;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 }

@@ -24,7 +24,7 @@ public class ResultsController {
     }
 
     @GetMapping("/api/assessment/submissions/{jobId}")
-    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    @PreAuthorize("@jobAccess.canReadResults(#jobId, authentication)")
     public ResponseEntity<AssessmentSubmissionsResponse> submissions(@PathVariable UUID jobId) {
         return ResponseEntity.ok(results.submissions(jobId));
     }

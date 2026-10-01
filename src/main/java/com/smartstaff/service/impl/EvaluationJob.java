@@ -69,6 +69,7 @@ public class EvaluationJob {
     private final JobRoleProfileRepository roleProfiles;
     private final AttemptEventRepository events;
     private final ResultSummarizer summarizer;
+    private final ReviewRouter reviewRouter;
     private final TransactionTemplate tx;
 
     private final double codeWriteTestShare;
@@ -83,7 +84,7 @@ public class EvaluationJob {
                          AssessmentScorecardRepository scorecards, SettingsService settings, CodeRunnerService runner,
                          RubricGrader grader, AssessmentMapper mapper, ObjectMapper json,
                          JobRoleProfileRepository roleProfiles, AttemptEventRepository events, ResultSummarizer summarizer,
-                         PlatformTransactionManager transactionManager,
+                         ReviewRouter reviewRouter, PlatformTransactionManager transactionManager,
                          @Value("${app.evaluation.code-write-test-share:0.7}") double codeWriteTestShare,
                          @Value("${app.evaluation.rubric-half-below:0.5}") double rubricHalfBelow,
                          @Value("${app.evaluation.rubric-zero-below:0.25}") double rubricZeroBelow,
@@ -103,6 +104,7 @@ public class EvaluationJob {
         this.roleProfiles = roleProfiles;
         this.events = events;
         this.summarizer = summarizer;
+        this.reviewRouter = reviewRouter;
         this.tx = new TransactionTemplate(transactionManager);
         this.tx.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
         this.codeWriteTestShare = codeWriteTestShare;
@@ -175,7 +177,8 @@ public class EvaluationJob {
             Map<String, Object> summary = summarizer.summarize(snap.apiKey(), facts);
             if ("AI".equals(summary.get("source"))) {
                 tx.executeWithoutResult(s -> attempts.findById(attemptId).ifPresent(a -> {
-                    if (a.getStatus() == AttemptStatus.EVALUATED) {
+                    if (a.getStatus() == AttemptStatus.EVALUATED || a.getStatus() == AttemptStatus.AWAITING_REVIEW
+                            || (a.getStatus() == AttemptStatus.VALIDATED && "sampling".equals(a.getValidationReason()))) {
                         a.setSummary(summary);
                         attempts.save(a);
                     }
@@ -192,7 +195,7 @@ public class EvaluationJob {
         boolean eligible = switch (mode) {
             case FULL -> force
                     ? a.getStatus() == AttemptStatus.SUBMITTED || a.getStatus() == AttemptStatus.EVALUATING
-                        || a.getStatus() == AttemptStatus.EVALUATED
+                        || a.getStatus() == AttemptStatus.EVALUATED || a.getStatus() == AttemptStatus.AWAITING_REVIEW
                     : a.getStatus() == AttemptStatus.SUBMITTED
                         || (a.getStatus() == AttemptStatus.EVALUATING && a.getNextEvaluationAt() == null
                             && a.getEvaluationStartedAt() != null
@@ -493,6 +496,7 @@ public class EvaluationJob {
             if (!pending) a.setRubricPendingSince(null);
         }
         ResultNarrator.Facts facts = a.getStatus() == AttemptStatus.EVALUATED ? result(a, written) : null;
+        if (facts != null) reviewRouter.routeResult(a);   // F12: to an SME, or validated by sampling
         attempts.save(a);
         project(a, written);
         return facts;
