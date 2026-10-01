@@ -54,6 +54,12 @@ public class QuestionValidator {
     }
 
     public Result validate(QuestionDraft draft, Set<String> profileSkills, String targetSkill) {
+        return validate(draft, profileSkills, targetSkill, true);
+    }
+
+    /** requireNaive=false is for HR edits: an edited CODE_WRITE has no naive
+     *  solution to prove the hidden tests against, so only the reference is run. */
+    public Result validate(QuestionDraft draft, Set<String> profileSkills, String targetSkill, boolean requireNaive) {
         AssessmentQuestion q = draft.question();
         Result skill = checkSkill(q, profileSkills, targetSkill);
         if (skill != null) return skill;
@@ -63,7 +69,7 @@ public class QuestionValidator {
             case MCQ, MSQ -> choice(q);
             case SCENARIO -> scenario(q);
             case LOGIC -> logic(q);
-            case CODE_WRITE -> codeWrite(q, draft.naiveSolution());
+            case CODE_WRITE -> codeWrite(q, draft.naiveSolution(), requireNaive);
             case CODE_DEBUG -> codeDebug(q);
             case CODE_OUTPUT -> codeOutput(q);
         };
@@ -133,7 +139,7 @@ public class QuestionValidator {
 
     // ── code ────────────────────────────────────────────────────────────
 
-    private Result codeWrite(AssessmentQuestion q, Map<String, String> naive) {
+    private Result codeWrite(AssessmentQuestion q, Map<String, String> naive, boolean requireNaive) {
         Result shape = testShape(q, MIN_VISIBLE_WRITE, MIN_HIDDEN_WRITE);
         if (shape != null) return shape;
         Result code = codeFor(q, q.getReferenceSolution(), "reference solution");
@@ -149,6 +155,8 @@ public class QuestionValidator {
             if (problem != null) return problem;
             log.append(lang).append(" reference passed ").append(r.passedCount()).append('/').append(r.tests().size()).append(". ");
         }
+
+        if (!requireNaive) return Result.pass(log.append("Naive check skipped (HR edit).").toString().trim());
 
         String lang = q.getLanguages().get(0);
         String naiveCode = naive == null ? null : naive.get(lang);

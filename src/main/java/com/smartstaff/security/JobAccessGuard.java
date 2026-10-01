@@ -2,6 +2,7 @@ package com.smartstaff.security;
 
 import com.smartstaff.entity.Role;
 import com.smartstaff.entity.User;
+import com.smartstaff.repository.AssessmentQuestionRepository;
 import com.smartstaff.repository.InterviewRepository;
 import com.smartstaff.repository.JobRepository;
 import org.springframework.security.core.Authentication;
@@ -31,10 +32,13 @@ public class JobAccessGuard {
 
     private final JobRepository jobRepository;
     private final InterviewRepository interviewRepository;
+    private final AssessmentQuestionRepository questionRepository;
 
-    public JobAccessGuard(JobRepository jobRepository, InterviewRepository interviewRepository) {
+    public JobAccessGuard(JobRepository jobRepository, InterviewRepository interviewRepository,
+                          AssessmentQuestionRepository questionRepository) {
         this.jobRepository = jobRepository;
         this.interviewRepository = interviewRepository;
+        this.questionRepository = questionRepository;
     }
 
     public boolean canAccessJob(UUID jobId, Authentication auth) {
@@ -49,6 +53,11 @@ public class JobAccessGuard {
 
     public boolean canAccessInterview(UUID interviewId, Authentication auth) {
         return allowed(interviewId == null ? Optional.empty() : interviewRepository.findJobOwnerIdById(interviewId), auth);
+    }
+
+    /** For question-scoped endpoints (edit / regenerate one question). */
+    public boolean canAccessQuestion(UUID questionId, Authentication auth) {
+        return allowed(questionId == null ? Optional.empty() : questionRepository.findJobOwnerIdByQuestionId(questionId), auth);
     }
 
     /** For request bodies that carry the interview as an `interview_id` string. */

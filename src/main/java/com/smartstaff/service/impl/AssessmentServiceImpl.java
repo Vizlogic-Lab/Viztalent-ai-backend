@@ -233,12 +233,15 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public AnswerKeyResponse answerKey(UUID jobId) {
+    public AnswerKeyResponse answerKey(UUID jobId, Integer version) {
         Job job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
-        Assessment assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                        "No assessment has been generated for this job yet."));
+        Assessment assessment = (version == null
+                ? assessmentRepository.findByJobIdAndCurrentTrue(jobId)
+                : assessmentRepository.findByJobIdAndVersion(jobId, version))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, version == null
+                        ? "No assessment has been generated for this job yet."
+                        : "This job has no assessment version " + version + "."));
 
         List<AssessmentQuestion> all = assessmentQuestionRepository.findByAssessmentIdOrderByLevelAscSeqAsc(assessment.getId());
         Map<String, List<AssessmentQuestion>> grouped = new LinkedHashMap<>();
@@ -254,7 +257,9 @@ public class AssessmentServiceImpl implements AssessmentService {
             levels.add(new AnswerKeyLevelResponse(level, questions.size(), questions));
         }
 
-        return new AnswerKeyResponse(true, job.getTitle(), levels);
+        return new AnswerKeyResponse(true, job.getTitle(), levels, assessment.getId().toString(),
+                assessment.getVersion(), assessment.getStatus().name(), assessment.isCurrent(),
+                assessmentAttemptRepository.existsByAssessmentId(assessment.getId()));
     }
 
     @Override

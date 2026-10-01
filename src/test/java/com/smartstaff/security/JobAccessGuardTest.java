@@ -3,6 +3,7 @@ package com.smartstaff.security;
 import com.smartstaff.entity.AccountStatus;
 import com.smartstaff.entity.Role;
 import com.smartstaff.entity.User;
+import com.smartstaff.repository.AssessmentQuestionRepository;
 import com.smartstaff.repository.InterviewRepository;
 import com.smartstaff.repository.JobRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +23,8 @@ class JobAccessGuardTest {
 
     private final JobRepository jobs = mock(JobRepository.class);
     private final InterviewRepository interviews = mock(InterviewRepository.class);
-    private final JobAccessGuard guard = new JobAccessGuard(jobs, interviews);
+    private final AssessmentQuestionRepository questions = mock(AssessmentQuestionRepository.class);
+    private final JobAccessGuard guard = new JobAccessGuard(jobs, interviews, questions);
 
     private final UUID jobId = UUID.randomUUID();
     private final UUID interviewId = UUID.randomUUID();

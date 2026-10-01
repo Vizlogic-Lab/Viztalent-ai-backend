@@ -3,8 +3,10 @@ package com.smartstaff.controller;
 import com.smartstaff.dto.request.AssessmentGenerateRequest;
 import com.smartstaff.dto.request.AssessmentRunRequest;
 import com.smartstaff.dto.request.AssessmentSaveRequest;
+import com.smartstaff.dto.request.QuestionEditRequest;
 import com.smartstaff.dto.response.*;
 import com.smartstaff.entity.User;
+import com.smartstaff.service.AssessmentQuestionService;
 import com.smartstaff.service.AssessmentService;
 import com.smartstaff.service.CandidateAssessmentService;
 import jakarta.validation.Valid;
@@ -20,11 +22,14 @@ public class AssessmentController {
 
     private final AssessmentService assessmentService;
     private final CandidateAssessmentService candidateAssessmentService;
+    private final AssessmentQuestionService questionService;
 
     public AssessmentController(AssessmentService assessmentService,
-                                CandidateAssessmentService candidateAssessmentService) {
+                                CandidateAssessmentService candidateAssessmentService,
+                                AssessmentQuestionService questionService) {
         this.assessmentService = assessmentService;
         this.candidateAssessmentService = candidateAssessmentService;
+        this.questionService = questionService;
     }
 
     @GetMapping("/api/assessment/submissions/{jobId}")
@@ -48,8 +53,22 @@ public class AssessmentController {
 
     @GetMapping("/api/assessment/answer_key/{jobId}")
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
-    public ResponseEntity<AnswerKeyResponse> answerKey(@PathVariable UUID jobId) {
-        return ResponseEntity.ok(assessmentService.answerKey(jobId));
+    public ResponseEntity<AnswerKeyResponse> answerKey(@PathVariable UUID jobId,
+                                                       @RequestParam(required = false) Integer version) {
+        return ResponseEntity.ok(assessmentService.answerKey(jobId, version));
+    }
+
+    @PostMapping("/api/assessment/questions/{questionId}/regenerate")
+    @PreAuthorize("@jobAccess.canAccessQuestion(#questionId, authentication)")
+    public ResponseEntity<AssessmentQuestionResponse> regenerateQuestion(@PathVariable UUID questionId) {
+        return ResponseEntity.ok(questionService.regenerate(questionId));
+    }
+
+    @PutMapping("/api/assessment/questions/{questionId}")
+    @PreAuthorize("@jobAccess.canAccessQuestion(#questionId, authentication)")
+    public ResponseEntity<AssessmentQuestionResponse> editQuestion(@PathVariable UUID questionId,
+                                                                   @RequestBody QuestionEditRequest req) {
+        return ResponseEntity.ok(questionService.edit(questionId, req));
     }
 
     @GetMapping("/api/assessment/scorecard/{jobId}/{attemptId}")

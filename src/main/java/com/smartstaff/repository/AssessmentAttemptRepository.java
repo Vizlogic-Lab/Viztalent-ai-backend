@@ -11,6 +11,9 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
 
     Optional<AssessmentAttempt> findByInviteId(UUID inviteId);
 
+    /** A version that anyone has opened is frozen: its questions can't be edited or regenerated. */
+    boolean existsByAssessmentId(UUID assessmentId);
+
     List<AssessmentAttempt> findByJobIdOrderByStartedAtDesc(UUID jobId);
 
     long countByJobIdAndStatus(UUID jobId, com.smartstaff.entity.AttemptStatus status);

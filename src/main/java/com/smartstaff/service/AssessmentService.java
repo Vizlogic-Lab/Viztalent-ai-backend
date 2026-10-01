@@ -17,7 +17,8 @@ public interface AssessmentService {
 
     AssessmentGenerateResponse generate(AssessmentGenerateRequest req, User admin);
 
-    AnswerKeyResponse answerKey(UUID jobId);
+    /** The answer key of the current version, or of `version` when given. */
+    AnswerKeyResponse answerKey(UUID jobId, Integer version);
 
     /** The scorecard for one attempt of this job (or a NONE placeholder while
      *  it is still being scored). */

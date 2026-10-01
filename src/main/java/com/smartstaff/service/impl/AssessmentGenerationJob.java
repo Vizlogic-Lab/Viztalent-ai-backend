@@ -187,6 +187,78 @@ public class AssessmentGenerationJob {
         finish(run, loaded.jobId());
     }
 
+    /** Outcome of regenerating one slot: the replacement's id, or why nothing
+     *  valid was produced (the old question is then left in place). */
+    public record SlotResult(UUID questionId, String failure, List<String> log) {}
+
+    /** Re-runs the F4 pipeline (draft → validate → retry with the reason → bank)
+     *  for one slot of an existing version and replaces that question in place,
+     *  in the same version. Synchronous; no Gemini or sandbox call happens inside
+     *  a transaction, and the old question is removed only once a valid
+     *  replacement exists. Prefers a fresh AI draft (bank first only for custom
+     *  sets) and never reuses a bank item already in this version. */
+    public SlotResult regenerateSlot(UUID assessmentId, String level, int seq, UUID oldQuestionId) {
+        record Loaded(UUID jobId, String source, Blueprint blueprint, Set<UUID> usedInVersion) {}
+        Loaded loaded = tx.execute(s -> assessments.findById(assessmentId).map(a -> new Loaded(
+                a.getJob().getId(), a.getSource(),
+                a.getBlueprint() == null ? null : a.getBlueprint().get(level),
+                new HashSet<>(questions.bankItemsUsedInAssessment(assessmentId)))).orElse(null));
+        if (loaded == null) return new SlotResult(null, "Assessment not found.", List.of());
+        if (loaded.blueprint() == null) {
+            return new SlotResult(null, "This version has no blueprint for " + level + ", so a single question can't be "
+                    + "regenerated. Regenerate the whole assessment instead.", List.of());
+        }
+        Blueprint.Slot slot = loaded.blueprint().slots().stream().filter(sl -> sl.seq() == seq).findFirst().orElse(null);
+        if (slot == null) return new SlotResult(null, "No blueprint slot " + level + " #" + (seq + 1) + ".", List.of());
+
+        Job job = jobs.findById(loaded.jobId()).orElse(null);
+        if (job == null) return new SlotResult(null, "Job not found.", List.of());
+        JobRoleProfile profile = profiles.findById(job.getId()).orElseGet(() -> RoleProfileRules.fallback(job));
+        Run run = new Run(assessmentId, loaded.source(), job, profile, settings.getGeminiApiKeyOrNull(), 1);
+        run.usedBankItems.addAll(loaded.usedInVersion());
+        run.usedBefore.addAll(questions.bankItemsUsedByJob(job.getId(), assessmentId));
+
+        List<String> codeLanguages = loaded.blueprint().languages().stream()
+                .filter(runner.availableLanguages().keySet()::contains).toList();
+        if (slot.type().isCode() && codeLanguages.isEmpty()) {
+            return new SlotResult(null, "The code runner isn't available for this job's languages, so a coding "
+                    + "question can't be validated.", List.of());
+        }
+        SlotWork w = new SlotWork(new SlotContext(job, profile, loaded.blueprint(), slot, codeLanguages),
+                "CUSTOM".equals(run.source));
+
+        w.pending = nextCandidate(run, w);
+        while (w.pending != null) {
+            QuestionDraft draft = w.pending;
+            UUID bankItemId = draft.question().getBankItemId();
+            if (bankItemId != null && run.usedBankItems.contains(bankItemId)) {
+                w.pending = nextCandidate(run, w);
+                continue;
+            }
+            QuestionValidator.Result result = validator.validate(draft, run.profileSkills, slot.targetSkill());
+            w.log.add(origin(draft) + ": " + result.log());
+            if (result.ok()) {
+                return new SlotResult(replace(assessmentId, oldQuestionId, draft, w.log), null, w.log);
+            }
+            w.lastFailure = result.reason();
+            if (result.runnerUnavailable() && slot.type().isCode()) break;
+            w.pending = nextCandidate(run, w);
+        }
+        return new SlotResult(null, w.lastFailure != null ? w.lastFailure : noSourceReason(run), w.log);
+    }
+
+    private UUID replace(UUID assessmentId, UUID oldQuestionId, QuestionDraft draft, List<String> log) {
+        AssessmentQuestion q = draft.question();
+        q.setValidated(true);
+        q.setValidationLog("Regenerated (single question).\n" + String.join("\n", log));
+        return tx.execute(s -> {
+            questions.findById(oldQuestionId).ifPresent(questions::delete);
+            questions.flush();
+            q.setAssessment(assessments.getReferenceById(assessmentId));
+            return questions.save(q).getId();
+        });
+    }
+
     private void fill(Run run, SlotWork w) {
         if (w.skipReason != null) {
             unfilled(run, w, w.skipReason);
