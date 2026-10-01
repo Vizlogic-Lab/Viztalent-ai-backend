@@ -38,6 +38,7 @@ public class ReviewService {
     static final Set<String> RECOMMENDATIONS = Set.of("PROCEED", "HR_REVIEW", "NOT_RECOMMENDED");
     private static final List<SmeReview.Status> OPEN = List.of(SmeReview.Status.PENDING, SmeReview.Status.IN_REVIEW);
 
+    private final ActivityRecorder activity;
     private final SmeReviewRepository reviews;
     private final ReviewAuditRepository audit;
     private final JobReviewerRepository jobReviewers;
@@ -58,7 +59,9 @@ public class ReviewService {
                          AssessmentQuestionRepository questions, AssessmentAttemptRepository attempts,
                          AssessmentAnswerRepository answers, AttemptEventRepository events,
                          JobRoleProfileRepository roleProfiles, AssessmentQuestionService questionService,
-                         AssessmentMapper mapper, PlatformTransactionManager transactionManager) {
+                         AssessmentMapper mapper, PlatformTransactionManager transactionManager,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.reviews = reviews;
         this.audit = audit;
         this.jobReviewers = jobReviewers;
@@ -174,6 +177,9 @@ public class ReviewService {
             r.setSignedOffAt(Instant.now());
             reviews.save(r);
             log(r, actor, action.equals("APPROVE") ? "APPROVED" : "RETURNED", before, state(r));
+            int version = assessments.findById(r.getSubjectId()).map(Assessment::getVersion).orElse(0);
+            activity.record(r.getJobId(), ActivityRecorder.ASSESSMENT, "Assessment v" + version
+                    + (action.equals("APPROVE") ? " approved by " : " returned by ") + actor.getName(), r.getSubjectId());
             return row(r);
         });
     }
@@ -284,6 +290,8 @@ public class ReviewService {
             attempts.save(a);
             reviews.save(r);
             log(r, actor, "SIGNED_OFF", before, state(r, a));
+            activity.record(r.getJobId(), ActivityRecorder.VALIDATION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
+                    + " result validated by " + actor.getName() + ": " + a.getRecommendation(), a.getId());
             return row(r);
         });
     }

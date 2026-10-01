@@ -40,6 +40,7 @@ public class AssessmentGenerationJob {
     static final int MAX_GEMINI_ATTEMPTS = 3;
     static final int MAX_BANK_CANDIDATES = 5;
 
+    private final ActivityRecorder activity;
     private final AssessmentRepository assessments;
     private final AssessmentQuestionRepository questions;
     private final JobRepository jobs;
@@ -56,7 +57,9 @@ public class AssessmentGenerationJob {
                                    JobRepository jobs, JobRoleProfileRepository profiles, QuestionBankItemRepository bank,
                                    SettingsService settings, CodeRunnerService runner, QuestionDrafter drafter,
                                    QuestionValidator validator, ReviewRouter reviewRouter,
-                                   PlatformTransactionManager transactionManager) {
+                                   PlatformTransactionManager transactionManager,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.assessments = assessments;
         this.questions = questions;
         this.jobs = jobs;
@@ -466,6 +469,7 @@ public class AssessmentGenerationJob {
                 a.setCurrent(true);
                 a.setError(null);
                 reviewRouter.questionSetReady(a);   // F12: SME approval before invites, if the job asks for it
+                activity.record(jobId, ActivityRecorder.ASSESSMENT, "Assessment v" + a.getVersion() + " generated", a.getId());
             });
         });
     }

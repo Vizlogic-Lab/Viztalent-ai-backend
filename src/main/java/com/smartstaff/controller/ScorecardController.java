@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-/** GET /api/scorecard/{jobId}/{attemptId} — the scored scorecard as a PDF.
+/** GET /api/scorecard/{jobId}/{attemptId} — the attempt's result as a PDF (F14).
+ *  {idx} (a submissions-list index) is still accepted as an alias.
  *  Opened as a plain link (no bearer header), so the frontend first calls
  *  POST /api/downloads/sign to get a signed, short-lived URL; the
  *  DownloadSignatureFilter authenticates that signature as the signing user,
@@ -28,10 +29,10 @@ public class ScorecardController {
         this.assessmentService = assessmentService;
     }
 
-    @GetMapping("/api/scorecard/{jobId}/{attemptId}")
+    @GetMapping("/api/scorecard/{jobId}/{ref}")
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
-    public ResponseEntity<byte[]> scorecardPdf(@PathVariable UUID jobId, @PathVariable UUID attemptId) {
-        ScorecardPdf pdf = assessmentService.scorecardPdf(jobId, attemptId);
+    public ResponseEntity<byte[]> scorecardPdf(@PathVariable UUID jobId, @PathVariable String ref) {
+        ScorecardPdf pdf = assessmentService.scorecardPdf(jobId, ref);
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(pdf.filename(), StandardCharsets.UTF_8).build();
         return ResponseEntity.ok()

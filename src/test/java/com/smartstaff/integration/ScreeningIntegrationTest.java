@@ -197,7 +197,7 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("screened candidates show up in the job detail, and in the CSV report opened through a signed link")
+    @DisplayName("screened candidates show up in the job detail, and in the .xlsx report opened through a signed link")
     void detailAndReport() throws Exception {
         Account owner = newEmployee();
         String job = uploadJd(owner, "senior_java_developer.txt", JD);
@@ -211,9 +211,16 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
         // The frontend opens this as a plain <a href> with no bearer token, so it signs the path first.
         String url = bodyOf(postJsonAs(owner, "/api/downloads/sign", Map.of("path", "/api/download_report"))
                 .andExpect(status().isOk())).path("url").asText();
-        mvc.perform(MockMvcRequestBuilders.get(url))
+        byte[] xlsx = mvc.perform(MockMvcRequestBuilders.get(url))
                 .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.parseMediaType("text/csv")));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")))
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(xlsx))) {
+            var row = wb.getSheet("Candidates").getRow(1);
+            assertThat(row.getCell(2).getStringCellValue()).isEqualTo("Priya Nair");
+            assertThat(row.getCell(6).getNumericCellValue()).isGreaterThan(0);
+        }
     }
 
     @Test

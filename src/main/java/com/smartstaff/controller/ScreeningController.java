@@ -8,6 +8,7 @@ import com.smartstaff.entity.User;
 import com.smartstaff.exception.ApiException;
 import com.smartstaff.service.RecruiterChatService;
 import com.smartstaff.service.ScreeningService;
+import com.smartstaff.service.impl.ReportXlsxService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -24,8 +25,11 @@ public class ScreeningController {
 
     private final ScreeningService screeningService;
     private final RecruiterChatService recruiterChatService;
+    private final ReportXlsxService reportService;
 
-    public ScreeningController(ScreeningService screeningService, RecruiterChatService recruiterChatService) {
+    public ScreeningController(ScreeningService screeningService, RecruiterChatService recruiterChatService,
+                               ReportXlsxService reportService) {
+        this.reportService = reportService;
         this.screeningService = screeningService;
         this.recruiterChatService = recruiterChatService;
     }
@@ -52,12 +56,12 @@ public class ScreeningController {
     @GetMapping("/api/download_report")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<byte[]> downloadReport(@AuthenticationPrincipal User requester) {
-        // Report CSV is scoped by the service: admin = all jobs, employee = own jobs only.
-        byte[] csv = screeningService.downloadReportCsv(requester);
+        // F14: .xlsx, scoped by the service: admin = all jobs, employee = own jobs only.
+        byte[] xlsx = reportService.report(requester);
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("text/csv"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"viztalent-report.csv\"")
-                .body(csv);
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"viztalent-report.xlsx\"")
+                .body(xlsx);
     }
 
     private UUID parseJobId(String sessionId) {

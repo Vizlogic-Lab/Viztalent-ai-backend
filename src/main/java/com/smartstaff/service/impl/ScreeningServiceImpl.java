@@ -14,7 +14,6 @@ import com.smartstaff.repository.CandidateRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.repository.ResumeRepository;
 import com.smartstaff.service.ScreeningService;
-import com.smartstaff.util.CsvSafetyService;
 import com.smartstaff.util.ExperienceParser;
 import com.smartstaff.util.SkillDictionary;
 import org.springframework.http.HttpStatus;
@@ -46,7 +45,6 @@ public class ScreeningServiceImpl implements ScreeningService {
     private final CandidateMapper candidateMapper;
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
-    private final CsvSafetyService csvSafetyService;
 
     public ScreeningServiceImpl(
             JobRepository jobRepository,
@@ -54,8 +52,7 @@ public class ScreeningServiceImpl implements ScreeningService {
             CandidateRepository candidateRepository,
             CandidateMapper candidateMapper,
             SkillDictionary skillDictionary,
-            ExperienceParser experienceParser,
-            CsvSafetyService csvSafetyService
+            ExperienceParser experienceParser
     ) {
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
@@ -63,7 +60,6 @@ public class ScreeningServiceImpl implements ScreeningService {
         this.candidateMapper = candidateMapper;
         this.skillDictionary = skillDictionary;
         this.experienceParser = experienceParser;
-        this.csvSafetyService = csvSafetyService;
     }
 
     @Override
@@ -110,32 +106,6 @@ public class ScreeningServiceImpl implements ScreeningService {
     @Override
     public ProgressResponse progress() {
         return ProgressResponse.IDLE;
-    }
-
-    @Override
-    public byte[] downloadReportCsv(User requester) {
-        // Report is scoped by user role: admin sees all jobs, employee sees only their own.
-        // requester is always non-null (endpoint is now authenticated).
-        List<Job> jobs = (requester.getRole() == Role.ADMIN)
-                ? jobRepository.findAllByOrderByCreatedAtDesc()
-                : jobRepository.findByOwnerIdIgnoreCaseOrderByCreatedAtDesc(requester.publicId());
-
-        StringBuilder csv = new StringBuilder();
-        csv.append("JD Number,Role,Candidate,Email,Phone,Years Experience,Fit Score,Matched Skills,Missing Skills\n");
-        for (Job job : jobs) {
-            for (Candidate c : candidateRepository.findByJobIdOrderByFitScoreDesc(job.getId())) {
-                csv.append(csvCell(job.jdNumberDisplay())).append(',')
-                        .append(csvCell(job.getTitle())).append(',')
-                        .append(csvCell(c.getCandidateName())).append(',')
-                        .append(csvCell(c.getEmail())).append(',')
-                        .append(csvCell(c.getPhone())).append(',')
-                        .append(c.getYearsExperience()).append(',')
-                        .append(c.getFitScore()).append(',')
-                        .append(csvCell(String.join("; ", c.getMatchedSkills()))).append(',')
-                        .append(csvCell(String.join("; ", c.getMissingSkills()))).append('\n');
-            }
-        }
-        return csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     // ── scoring ──────────────────────────────────────────────────────────
@@ -243,14 +213,5 @@ public class ScreeningServiceImpl implements ScreeningService {
             sb.append(Character.toUpperCase(w.charAt(0))).append(w.length() > 1 ? w.substring(1) : "");
         }
         return sb.toString();
-    }
-
-    private String csvCell(String value) {
-        if (value == null) return "";
-        // First escape for CSV (quote doubling)
-        String escaped = value.replace("\"", "\"\"");
-        // Then protect against formula injection (prefix =, +, -, @ with ')
-        String safe = csvSafetyService.escapeCsvCell(escaped);
-        return "\"" + safe + "\"";
     }
 }

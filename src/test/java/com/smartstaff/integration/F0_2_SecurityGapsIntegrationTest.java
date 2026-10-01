@@ -72,9 +72,13 @@ class F0_2_SecurityGapsIntegrationTest extends IntegrationTestBase {
         createJob(alice, "Alice Only Role", "java");
         createJob(bob, "Bob Only Role", "python");
 
-        String csv = mvc.perform(MockMvcRequestBuilders.get(sign(alice, "/api/download_report")))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(csv).doesNotContain("Bob Only Role");
+        byte[] xlsx = mvc.perform(MockMvcRequestBuilders.get(sign(alice, "/api/download_report")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(xlsx))) {
+            StringBuilder text = new StringBuilder();
+            wb.forEach(sheet -> sheet.forEach(row -> row.forEach(cell -> text.append(cell).append('|'))));
+            assertThat(text).contains("JD Number").doesNotContain("Bob Only Role");
+        }
     }
 
     @Test

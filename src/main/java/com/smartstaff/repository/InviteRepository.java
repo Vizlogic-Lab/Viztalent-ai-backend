@@ -16,6 +16,11 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
 
     Optional<Invite> findByTokenHash(String tokenHash);
 
+    /** F14 dashboard: assessment invites sent / fully completed (consumed on the last level's submit). */
+    long countByJobIdInAndKind(java.util.Collection<UUID> jobIds, String kind);
+
+    long countByJobIdInAndKindAndUsedAtIsNotNull(java.util.Collection<UUID> jobIds, String kind);
+
     /** Candidates for coalescing — caller filters by exact `levels` match
      *  (jsonb equality isn't worth a bespoke query for this small a table). */
     List<Invite> findByJobIdAndCandidateEmailIgnoreCaseAndCombinedAndUsedAtIsNullAndExpiresAtAfter(

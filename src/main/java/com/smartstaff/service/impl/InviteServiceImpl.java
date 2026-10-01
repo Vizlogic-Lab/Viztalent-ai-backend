@@ -47,6 +47,7 @@ public class InviteServiceImpl implements InviteService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    private final ActivityRecorder activity;
     private final JobRepository jobRepository;
     private final InviteRepository inviteRepository;
     private final SettingsService settingsService;
@@ -58,7 +59,9 @@ public class InviteServiceImpl implements InviteService {
     public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService,
                              AssessmentRepository assessmentRepository,
                              AssessmentQuestionRepository assessmentQuestionRepository,
-                             CandidateRepository candidateRepository, ReviewRouter reviewRouter) {
+                             CandidateRepository candidateRepository, ReviewRouter reviewRouter,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.reviewRouter = reviewRouter;
         this.jobRepository = jobRepository;
         this.inviteRepository = inviteRepository;
@@ -131,6 +134,9 @@ public class InviteServiceImpl implements InviteService {
         invite.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
         invite.setCreatedBy(createdBy);
         inviteRepository.save(invite);
+        activity.record(job.getId(), ActivityRecorder.INVITE, "Assessment invite sent to "
+                + ActivityRecorder.who(invite.getCandidateName(), invite.getCandidateEmail())
+                + " (" + String.join(", ", levels) + ")", invite.getId());
 
         String levelParam = String.join(",", levels);
         String paramName = combined ? "levels" : "level";

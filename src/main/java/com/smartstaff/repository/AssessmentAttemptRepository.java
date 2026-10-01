@@ -33,6 +33,21 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
 
     long countByJobIdAndStatus(UUID jobId, AttemptStatus status);
 
+    /** F14 dashboard: invites with at least one attempt. */
+    @Query("select count(distinct a.invite.id) from AssessmentAttempt a where a.job.id in :jobIds")
+    long countStartedInvites(@Param("jobIds") java.util.Collection<UUID> jobIds);
+
+    long countByJobIdInAndStatus(java.util.Collection<UUID> jobIds, AttemptStatus status);
+
+    long countByJobIdInAndStatusAndRecommendation(java.util.Collection<UUID> jobIds, AttemptStatus status, String recommendation);
+
+    /** F14 dashboard: [job id, average hands-on, results] per job, over attempts that have a result. */
+    @Query("select a.job.id, avg(a.handsOnScore), count(a) from AssessmentAttempt a where a.job.id in :jobIds "
+            + "and a.handsOnScore is not null and a.status in (com.smartstaff.entity.AttemptStatus.EVALUATED, "
+            + "com.smartstaff.entity.AttemptStatus.AWAITING_REVIEW, com.smartstaff.entity.AttemptStatus.VALIDATED) "
+            + "group by a.job.id")
+    List<Object[]> averageHandsOnByJob(@Param("jobIds") java.util.Collection<UUID> jobIds);
+
     /** A version that anyone has opened is frozen: its questions can't be edited or regenerated. */
     boolean existsByAssessmentId(UUID assessmentId);
 

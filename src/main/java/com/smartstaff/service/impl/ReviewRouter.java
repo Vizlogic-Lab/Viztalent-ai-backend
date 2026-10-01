@@ -22,11 +22,14 @@ public class ReviewRouter {
 
     static final int REVIEW_WORKING_DAYS = 2;
 
+    private final ActivityRecorder activity;
     private final SmeReviewRepository reviews;
     private final ReviewAuditRepository audit;
     private final JobReviewerRepository jobReviewers;
 
-    public ReviewRouter(SmeReviewRepository reviews, ReviewAuditRepository audit, JobReviewerRepository jobReviewers) {
+    public ReviewRouter(SmeReviewRepository reviews, ReviewAuditRepository audit, JobReviewerRepository jobReviewers,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.reviews = reviews;
         this.audit = audit;
         this.jobReviewers = jobReviewers;
@@ -79,6 +82,8 @@ public class ReviewRouter {
         } else {
             a.setStatus(AttemptStatus.VALIDATED);
             a.setValidationReason("sampling");
+            activity.record(job.getId(), ActivityRecorder.VALIDATION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
+                    + " result validated without SME review (sampling): " + a.getRecommendation(), a.getId());
         }
     }
 }

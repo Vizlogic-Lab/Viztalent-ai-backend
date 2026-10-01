@@ -43,6 +43,9 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final AssessmentAnswerRepository assessmentAnswerRepository;
     private final AssessmentScorecardRepository assessmentScorecardRepository;
+    private final SmeReviewRepository smeReviewRepository;
+    private final UserRepository userRepository;
+    private final AttemptEventRepository attemptEventRepository;
     private final EvaluationJob evaluationJob;
     private final ScorecardPdfService scorecardPdfService;
     private final QuestionBankItemRepository questionBankItemRepository;
@@ -67,7 +70,13 @@ public class AssessmentServiceImpl implements AssessmentService {
                                   BlueprintFactory blueprintFactory,
                                   AssessmentMapper assessmentMapper,
                                   ApplicationEventPublisher events,
-                                  PlatformTransactionManager transactionManager) {
+                                  PlatformTransactionManager transactionManager,
+                                  SmeReviewRepository smeReviewRepository,
+                                  UserRepository userRepository,
+                                  AttemptEventRepository attemptEventRepository) {
+        this.smeReviewRepository = smeReviewRepository;
+        this.userRepository = userRepository;
+        this.attemptEventRepository = attemptEventRepository;
         this.jobRepository = jobRepository;
         this.assessmentRepository = assessmentRepository;
         this.assessmentQuestionRepository = assessmentQuestionRepository;
@@ -262,17 +271,51 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public ScorecardPdf scorecardPdf(UUID jobId, UUID attemptId) {
-        AssessmentAttempt attempt = attemptForJob(jobId, attemptId);
-        AssessmentScorecard card = assessmentScorecardRepository.findByAttemptId(attemptId)
-                .filter(c -> c.getStatus() == ScorecardStatus.SCORED)
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
-                        "This attempt hasn't been scored yet.", "not_scored"));
-        byte[] pdf = scorecardPdfService.render(attempt.getJob().getTitle(), toScorecardResponse(attempt, card));
+    public ScorecardPdf scorecardPdf(UUID jobId, String ref) {
+        AssessmentAttempt attempt = attemptForJob(jobId, resolveAttempt(jobId, ref));
+        AttemptStatus st = attempt.getStatus();
+        if (st != AttemptStatus.EVALUATED && st != AttemptStatus.AWAITING_REVIEW && st != AttemptStatus.VALIDATED) {
+            throw new ApiException(HttpStatus.CONFLICT, "This attempt hasn't been scored yet.", "not_scored");
+        }
+        SmeReview review = smeReviewRepository.findBySubjectTypeAndSubjectId(SmeReview.Subject.ATTEMPT, attempt.getId())
+                .filter(r -> st == AttemptStatus.VALIDATED && r.getStatus().isClosed()).orElse(null);
+        String reviewer = review == null || review.getReviewerId() == null ? null
+                : userRepository.findById(review.getReviewerId()).map(User::getName).orElse(null);
+        Map<String, Long> integrity = new LinkedHashMap<>();
+        for (AttemptEventType type : AttemptEventType.values()) {
+            integrity.put(type.name(), attemptEventRepository.countByAttemptIdAndType(attempt.getId(), type));
+        }
+        Job job = attempt.getJob();
+        ScorecardPdfService.Card card = new ScorecardPdfService.Card(attempt.getCandidateName(), attempt.getCandidateEmail(),
+                job.getTitle(), job.jdNumberDisplay(), attempt.getLevel(), attempt.getVersion(), attempt.getSubmittedAt(),
+                attempt.getTheoryScore(), attempt.getHandsOnScore(), attempt.getOverallScore(),
+                attempt.getTheoryBand(), attempt.getHandsOnBand(), attempt.getRecommendation(),
+                attempt.getCompetencyScores(), attempt.getEvidenceLines(),
+                st == AttemptStatus.VALIDATED ? "VALIDATED" : "PROVISIONAL",
+                reviewer, review == null ? null : review.getComment(), review == null ? null : review.getSignedOffAt(),
+                attempt.getValidationReason(), attempt.getFlags(), integrity, attempt.isAutoSubmitted());
+        byte[] pdf = scorecardPdfService.render(card);
         String who = attempt.getCandidateName() != null && !attempt.getCandidateName().isBlank()
                 ? attempt.getCandidateName() : attempt.getCandidateEmail();
-        String filename = "scorecard-" + slug(who) + "-v" + attempt.getAssessment().getVersion() + ".pdf";
+        String filename = "scorecard-" + slug(who) + "-" + attempt.getLevel() + "-v" + attempt.getVersion() + ".pdf";
         return new ScorecardPdf(filename, pdf);
+    }
+
+    /** An attempt id, or (the older frontend's alias) a 0-based index into the
+     *  job's submissions list, newest first — the order GET /api/assessment/submissions returns. */
+    private UUID resolveAttempt(UUID jobId, String ref) {
+        try {
+            return UUID.fromString(ref);
+        } catch (IllegalArgumentException notUuid) {
+            try {
+                int idx = Integer.parseInt(ref);
+                List<AssessmentAttempt> all = assessmentAttemptRepository.findByJobIdOrderByStartedAtDesc(jobId);
+                if (idx >= 0 && idx < all.size()) return all.get(idx).getId();
+            } catch (NumberFormatException ignored) {
+                // fall through
+            }
+            throw new ApiException(HttpStatus.NOT_FOUND, "Attempt not found.");
+        }
     }
 
     private ScorecardResponse toScorecardResponse(AssessmentAttempt attempt, AssessmentScorecard card) {

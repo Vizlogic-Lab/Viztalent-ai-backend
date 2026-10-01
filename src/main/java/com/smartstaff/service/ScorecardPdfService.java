@@ -4,20 +4,23 @@ import com.lowagie.text.*;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
-import com.smartstaff.dto.response.ScorecardResponse;
-import com.smartstaff.entity.QuestionScoreBreakdown;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
-/** Renders a scored scorecard to a one-or-two-page PDF: a header with the
- *  candidate and result, then a per-question table. Pure formatting — no data
- *  access — so it can be unit-tested on a plain ScorecardResponse. */
+/** F14: renders one attempt's result as a shareable PDF — header, Theory and
+ *  Hands-on with bands, competencies, evidence lines, recommendation, a
+ *  Provisional/Validated stamp (with the SME and comment) and an integrity
+ *  summary. Pure formatting from a Card the caller builds from stored results;
+ *  the Card carries no questions, tests or reference solutions, so the PDF
+ *  can't leak them. */
 @Service
 public class ScorecardPdfService {
 
@@ -35,7 +38,6 @@ public class ScorecardPdfService {
     private static final Font VALUE = font(10, Font.NORMAL, INK);
     private static final Font TH = font(9, Font.BOLD, INK);
     private static final Font TD = font(9, Font.NORMAL, INK);
-    private static final Font TD_MUTED = font(8, Font.NORMAL, MUTED);
     private static final Font FOOT = font(8, Font.NORMAL, MUTED);
 
     private static final DateTimeFormatter WHEN =
@@ -44,7 +46,15 @@ public class ScorecardPdfService {
     /** A rendered scorecard PDF and the filename to serve it as. */
     public record ScorecardPdf(String filename, byte[] bytes) {}
 
-    public byte[] render(String jobTitle, ScorecardResponse card) {
+    /** Everything the PDF shows. resultStatus is PROVISIONAL or VALIDATED. */
+    public record Card(String candidateName, String candidateEmail, String jobTitle, String jdNumber, String level,
+                       int version, Instant submittedAt, BigDecimal theory, BigDecimal handsOn, BigDecimal overall,
+                       String theoryBand, String handsOnBand, String recommendation,
+                       Map<String, BigDecimal> competencies, List<String> evidenceLines, String resultStatus,
+                       String reviewerName, String smeComment, Instant signedOffAt, String validationReason,
+                       List<String> flags, Map<String, Long> integrityEvents, boolean autoSubmitted) {}
+
+    public byte[] render(Card card) {
         Document doc = new Document(PageSize.A4, 42, 42, 44, 44);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
@@ -52,16 +62,23 @@ public class ScorecardPdfService {
             doc.open();
 
             doc.add(paragraph("Assessment Scorecard", H1, 2));
-            doc.add(paragraph(jobTitle == null ? "" : jobTitle, font(12, Font.NORMAL, MUTED), 12));
-
+            doc.add(paragraph(nz(card.jobTitle()), font(12, Font.NORMAL, MUTED), 12));
             doc.add(headerGrid(card));
             doc.add(resultBanner(card));
-            if (card.needs_review()) {
-                doc.add(reviewNote(card));
-            }
+            doc.add(stamp(card));
 
-            doc.add(paragraph("Question breakdown", H2, 6));
-            doc.add(questionTable(card));
+            if (card.competencies() != null && !card.competencies().isEmpty()) {
+                doc.add(paragraph("Competencies", H2, 6));
+                doc.add(competencyTable(card.competencies()));
+            }
+            if (card.evidenceLines() != null && !card.evidenceLines().isEmpty()) {
+                doc.add(paragraph("Evidence", H2, 4));
+                com.lowagie.text.List list = new com.lowagie.text.List(false, 10);
+                for (String line : card.evidenceLines()) list.add(new ListItem(line, TD));
+                doc.add(list);
+            }
+            doc.add(paragraph("Integrity", H2, 4));
+            doc.add(paragraph(integrity(card), TD, 4));
 
             doc.add(footer());
             doc.close();
@@ -71,23 +88,21 @@ public class ScorecardPdfService {
         }
     }
 
-    // ── header (candidate + meta) ───────────────────────────────────────
+    // ── header ──────────────────────────────────────────────────────────
 
-    private PdfPTable headerGrid(ScorecardResponse card) {
+    private PdfPTable headerGrid(Card card) {
         PdfPTable grid = new PdfPTable(4);
         grid.setWidthPercentage(100);
         grid.setSpacingAfter(14);
-        grid.getDefaultCell().setBorder(Rectangle.NO_BORDER);
-        grid.getDefaultCell().setPaddingBottom(6);
-
-        cellPair(grid, "Candidate", value(card.candidate_name(), card.candidate_email()));
-        cellPair(grid, "Email", card.candidate_email());
-        cellPair(grid, "Levels", card.levels() == null ? "" : String.join(", ", card.levels()));
-        cellPair(grid, "Version", card.version() == null ? "—" : "v" + card.version());
-        cellPair(grid, "Submitted", card.submitted_at() == null ? "—" : WHEN.format(card.submitted_at()));
-        cellPair(grid, "Scored", card.scored_at() == null ? "—" : WHEN.format(card.scored_at()));
-        cellPair(grid, "Pass mark", card.pass_threshold() + "%");
-        cellPair(grid, "Status", card.status());
+        cellPair(grid, "Candidate", card.candidateName() != null && !card.candidateName().isBlank()
+                ? card.candidateName() : card.candidateEmail());
+        cellPair(grid, "Email", card.candidateEmail());
+        cellPair(grid, "Role", card.jobTitle());
+        cellPair(grid, "JD number", card.jdNumber());
+        cellPair(grid, "Level", card.level());
+        cellPair(grid, "Version", "v" + card.version());
+        cellPair(grid, "Submitted", card.submittedAt() == null ? null : WHEN.format(card.submittedAt()));
+        cellPair(grid, "Overall", card.overall() == null ? null : plain(card.overall()));
         return grid;
     }
 
@@ -101,117 +116,106 @@ public class ScorecardPdfService {
         grid.addCell(cell);
     }
 
-    // ── result banner ───────────────────────────────────────────────────
+    // ── scores + recommendation ─────────────────────────────────────────
 
-    private PdfPTable resultBanner(ScorecardResponse card) {
-        boolean provisional = card.needs_review();
-        Color accent = card.passed() ? PASS : FAIL;
-        String verdict = card.passed() ? "PASS" : "FAIL";
-        if (provisional) verdict += " (provisional)";
-
-        PdfPTable banner = new PdfPTable(new float[] {1.4f, 3f});
+    private PdfPTable resultBanner(Card card) {
+        PdfPTable banner = new PdfPTable(new float[] {1f, 1f, 1.3f});
         banner.setWidthPercentage(100);
-        banner.setSpacingAfter(14);
+        banner.setSpacingAfter(8);
+        banner.addCell(scoreCell("Theory", card.theory(), card.theoryBand()));
+        banner.addCell(scoreCell("Hands-on", card.handsOn(), card.handsOnBand()));
 
-        PdfPCell left = new PdfPCell();
-        left.setBackgroundColor(accent);
-        left.setBorder(Rectangle.NO_BORDER);
-        left.setPadding(12);
-        left.setHorizontalAlignment(Element.ALIGN_CENTER);
-        Paragraph pct = new Paragraph(plain(card.percent()) + "%", font(26, Font.BOLD, Color.WHITE));
-        pct.setAlignment(Element.ALIGN_CENTER);
-        left.addElement(pct);
-        Paragraph verdictP = new Paragraph(verdict, font(12, Font.BOLD, Color.WHITE));
-        verdictP.setAlignment(Element.ALIGN_CENTER);
-        left.addElement(verdictP);
-        banner.addCell(left);
-
+        String rec = card.recommendation() == null ? "—" : card.recommendation().replace('_', ' ');
+        Color accent = "PROCEED".equals(card.recommendation()) ? PASS
+                : "NOT_RECOMMENDED".equals(card.recommendation()) ? FAIL : REVIEW;
         PdfPCell right = new PdfPCell();
-        right.setBackgroundColor(HEAD_BG);
+        right.setBackgroundColor(accent);
         right.setBorder(Rectangle.NO_BORDER);
         right.setPadding(12);
-        right.addElement(new Paragraph("Score", LABEL));
-        right.addElement(new Paragraph(plain(card.total_score()) + " / " + plain(card.max_score()) + " points",
-                font(16, Font.BOLD, INK)));
-        if (provisional) {
-            right.addElement(new Paragraph(plain(card.review_points())
-                    + " points await manual review — this result is not final.", font(9, Font.NORMAL, REVIEW)));
-        }
+        right.addElement(new Paragraph("Recommendation", font(9, Font.NORMAL, Color.WHITE)));
+        right.addElement(new Paragraph(rec, font(16, Font.BOLD, Color.WHITE)));
         banner.addCell(right);
         return banner;
     }
 
-    private Paragraph reviewNote(ScorecardResponse card) {
-        Paragraph p = new Paragraph("Some answers could not be graded automatically (the code runner or the AI grader "
-                + "was unavailable). " + plain(card.review_points()) + " points are marked \"needs review\" below and "
-                + "must be graded by a person before the result is final.", font(9, Font.ITALIC, REVIEW));
-        p.setSpacingAfter(10);
+    private PdfPCell scoreCell(String label, BigDecimal score, String band) {
+        PdfPCell cell = new PdfPCell();
+        cell.setBackgroundColor(HEAD_BG);
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setPadding(12);
+        cell.addElement(new Paragraph(label, LABEL));
+        cell.addElement(new Paragraph(score == null ? "n/a" : plain(score) + " / 100", font(16, Font.BOLD, INK)));
+        cell.addElement(new Paragraph(band == null ? "" : band.replace('_', ' '), font(9, Font.BOLD, MUTED)));
+        return cell;
+    }
+
+    private Paragraph stamp(Card card) {
+        boolean validated = "VALIDATED".equals(card.resultStatus());
+        StringBuilder sb = new StringBuilder(validated ? "VALIDATED" : "PROVISIONAL");
+        if (validated && card.reviewerName() != null) {
+            sb.append(" — signed off by ").append(card.reviewerName());
+            if (card.signedOffAt() != null) sb.append(" on ").append(WHEN.format(card.signedOffAt()));
+        } else if (validated && card.validationReason() != null) {
+            sb.append(" — without SME review (").append(card.validationReason()).append(')');
+        } else if (!validated) {
+            sb.append(" — automatic result, not yet validated by a subject-matter expert");
+        }
+        Paragraph p = new Paragraph(sb.toString(), font(10, Font.BOLD, validated ? PASS : REVIEW));
+        if (card.smeComment() != null && !card.smeComment().isBlank()) {
+            p.add(new Chunk("\nSME comment: " + card.smeComment(), font(9, Font.ITALIC, INK)));
+        }
+        p.setSpacingAfter(14);
         return p;
     }
 
-    // ── question table ──────────────────────────────────────────────────
-
-    private PdfPTable questionTable(ScorecardResponse card) {
-        PdfPTable table = new PdfPTable(new float[] {0.7f, 1.4f, 1.6f, 1.1f, 1.0f, 3.3f});
-        table.setWidthPercentage(100);
-        table.setSpacingBefore(4);
-        header(table, "Q", "Type", "Skill", "Tests", "Score", "Detail");
-
-        List<ScorecardResponse.QuestionScoreView> questions =
-                card.questions() == null ? List.of() : card.questions();
-        boolean alt = false;
-        for (ScorecardResponse.QuestionScoreView q : questions) {
-            Color bg = alt ? new Color(0xfa, 0xfa, 0xfa) : Color.WHITE;
-            alt = !alt;
-            td(table, bg, q.level() + "·" + (q.seq() + 1), TD);
-            td(table, bg, q.type(), TD);
-            td(table, bg, q.skill() == null ? "—" : q.skill(), TD);
-            td(table, bg, q.tests_total() == null ? "—" : q.tests_passed() + "/" + q.tests_total(), TD);
-            td(table, bg, plain(q.score()) + "/" + q.max_points(), q.needs_review() ? font(9, Font.BOLD, REVIEW) : TD);
-            td(table, bg, detail(q), TD_MUTED);
-        }
+    private PdfPTable competencyTable(Map<String, BigDecimal> competencies) {
+        PdfPTable table = new PdfPTable(new float[] {3f, 1f});
+        table.setWidthPercentage(70);
+        table.setHorizontalAlignment(Element.ALIGN_LEFT);
+        table.setSpacingAfter(12);
+        th(table, "Competency");
+        th(table, "Score");
+        competencies.forEach((name, pct) -> {
+            td(table, name.replace('_', ' '));
+            td(table, pct == null ? "—" : plain(pct) + "%");
+        });
         return table;
     }
 
-    private static String detail(ScorecardResponse.QuestionScoreView q) {
+    private static String integrity(Card card) {
         StringBuilder sb = new StringBuilder();
-        if (!q.answered()) sb.append("Not answered. ");
-        if (q.needs_review()) sb.append("[needs review] ");
-        if (q.detail() != null) sb.append(q.detail());
-        if (q.breakdown() != null && !q.breakdown().isEmpty()) {
-            StringBuilder parts = new StringBuilder();
-            for (QuestionScoreBreakdown b : q.breakdown()) {
-                if (parts.length() > 0) parts.append(", ");
-                parts.append(b.label()).append(' ').append(trim(b.awarded())).append('/').append(trim(b.weight()));
-            }
-            sb.append("  (").append(parts).append(')');
+        Map<String, Long> ev = card.integrityEvents() == null ? Map.of() : card.integrityEvents();
+        sb.append("Tab switches: ").append(ev.getOrDefault("TAB_SWITCH", 0L))
+                .append(" · Pastes: ").append(ev.getOrDefault("PASTE", 0L))
+                .append(" · Focus lost: ").append(ev.getOrDefault("FOCUS_LOST", 0L))
+                .append(" · Full-screen exits: ").append(ev.getOrDefault("FULLSCREEN_EXIT", 0L));
+        if (card.autoSubmitted()) sb.append(" · Auto-submitted when time ran out");
+        if (card.flags() != null && !card.flags().isEmpty()) {
+            sb.append("\nFlags: ").append(String.join(", ", card.flags()));
         }
-        return sb.toString().trim();
+        return sb.toString();
     }
 
     // ── low-level helpers ───────────────────────────────────────────────
 
-    private void header(PdfPTable table, String... labels) {
-        for (String label : labels) {
-            PdfPCell cell = new PdfPCell(new Phrase(label, TH));
-            cell.setBackgroundColor(HEAD_BG);
-            cell.setBorderColor(LINE);
-            cell.setPadding(5);
-            table.addCell(cell);
-        }
+    private void th(PdfPTable table, String label) {
+        PdfPCell cell = new PdfPCell(new Phrase(label, TH));
+        cell.setBackgroundColor(HEAD_BG);
+        cell.setBorderColor(LINE);
+        cell.setPadding(5);
+        table.addCell(cell);
     }
 
-    private void td(PdfPTable table, Color bg, String text, Font font) {
-        PdfPCell cell = new PdfPCell(new Phrase(text == null ? "" : text, font));
-        cell.setBackgroundColor(bg);
+    private void td(PdfPTable table, String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text == null ? "" : text, TD));
         cell.setBorderColor(LINE);
         cell.setPadding(5);
         table.addCell(cell);
     }
 
     private Paragraph footer() {
-        Paragraph p = new Paragraph("Generated by SmartStaff · " + WHEN.format(java.time.Instant.now())
-                + " · Automatic grading; the code runner and AI grader are audited per question above.", FOOT);
+        Paragraph p = new Paragraph("Generated by SmartStaff · " + WHEN.format(Instant.now())
+                + " · Scores are computed from stored results; questions and reference solutions are not included.", FOOT);
         p.setSpacingBefore(16);
         return p;
     }
@@ -222,17 +226,12 @@ public class ScorecardPdfService {
         return p;
     }
 
-    private static String value(String name, String email) {
-        if (name != null && !name.isBlank()) return name;
-        return email == null ? "—" : email;
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     private static String plain(BigDecimal v) {
         return v == null ? "0" : v.stripTrailingZeros().toPlainString();
-    }
-
-    private static String trim(double v) {
-        return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v);
     }
 
     private static Font font(float size, int style, Color color) {

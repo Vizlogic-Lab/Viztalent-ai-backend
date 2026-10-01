@@ -24,5 +24,5 @@ public interface AssessmentService {
     void rescore(UUID jobId, UUID attemptId);
 
     /** The scorecard rendered as a downloadable PDF (only once SCORED). */
-    ScorecardPdfService.ScorecardPdf scorecardPdf(UUID jobId, UUID attemptId);
+    ScorecardPdfService.ScorecardPdf scorecardPdf(UUID jobId, String attemptIdOrIndex);
 }

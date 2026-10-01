@@ -52,6 +52,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
     static final long DEFAULT_LEVEL_SECONDS = 45L * 60;
     static final int EVENT_CAP = 500;
 
+    private final ActivityRecorder activity;
     private final InviteRepository inviteRepository;
     private final AssessmentAttemptRepository attemptRepository;
     private final AssessmentAnswerRepository answerRepository;
@@ -76,7 +77,9 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                                           ApplicationEventPublisher events,
                                           ObjectMapper json,
                                           PlatformTransactionManager transactionManager,
-                                          @Value("${app.assessment.run-limit-per-question:20}") int runLimit) {
+                                          @Value("${app.assessment.run-limit-per-question:20}") int runLimit,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.inviteRepository = inviteRepository;
         this.attemptRepository = attemptRepository;
         this.answerRepository = answerRepository;
@@ -353,6 +356,8 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
         if (nextLevel(invite, attempts) == null && inviteRepository.consume(invite.getId(), Instant.now()) == 1) {
             invite.setUsedAt(Instant.now());
         }
+        activity.record(a.getJob().getId(), ActivityRecorder.SUBMISSION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
+                + " submitted " + a.getLevel() + (auto ? " (time ran out)" : ""), a.getId());
         events.publishEvent(new AttemptSubmittedEvent(a.getId()));
         return true;
     }

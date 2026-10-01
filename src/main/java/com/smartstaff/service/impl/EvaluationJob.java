@@ -56,6 +56,7 @@ public class EvaluationJob {
 
     public enum Mode { FULL, RETRY_PENDING }
 
+    private final ActivityRecorder activity;
     private final AssessmentAttemptRepository attempts;
     private final AssessmentAnswerRepository answers;
     private final AssessmentQuestionRepository questions;
@@ -90,7 +91,9 @@ public class EvaluationJob {
                          @Value("${app.evaluation.rubric-zero-below:0.25}") double rubricZeroBelow,
                          @Value("${app.evaluation.disagreement-threshold:0.15}") double disagreementThreshold,
                          @Value("${app.evaluation.hardcode-min-literal-length:3}") int hardcodeMinLiteral,
-                         @Value("${app.evaluation.retry-window-minutes:60}") long retryWindowMinutes) {
+                         @Value("${app.evaluation.retry-window-minutes:60}") long retryWindowMinutes,
+            ActivityRecorder activity) {
+        this.activity = activity;
         this.attempts = attempts;
         this.answers = answers;
         this.questions = questions;
@@ -496,7 +499,11 @@ public class EvaluationJob {
             if (!pending) a.setRubricPendingSince(null);
         }
         ResultNarrator.Facts facts = a.getStatus() == AttemptStatus.EVALUATED ? result(a, written) : null;
-        if (facts != null) reviewRouter.routeResult(a);   // F12: to an SME, or validated by sampling
+        if (facts != null) {
+            activity.record(a.getJob().getId(), ActivityRecorder.EVALUATION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
+                    + " evaluated (" + a.getLevel() + "): " + a.getRecommendation(), a.getId());
+            reviewRouter.routeResult(a);   // F12: to an SME, or validated by sampling
+        }
         attempts.save(a);
         project(a, written);
         return facts;
