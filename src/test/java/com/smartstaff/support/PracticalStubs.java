@@ -62,7 +62,7 @@ public final class PracticalStubs {
             // Grading calls (F9) have no "skill" in their schema; drafting calls always do.
             JsonNode props = read(req.body()).path("generationConfig").path("responseSchema").path("properties");
             if (!props.has("skill")) {
-                return StubResponse.json(200, Fixtures.geminiText(props.has("criteria") ? rubricGrade() : scenarioGrade()));
+                return StubResponse.json(200, Fixtures.geminiText(rubricGrade(promptOf(req))));
             }
             String type = typeOf(req);
             String draft = draft(type, targetSkill(req), variants.getOrDefault(type, Variant.VALID));
@@ -70,21 +70,44 @@ public final class PracticalStubs {
         };
     }
 
-    /** Fake AI grade: full marks for every CODE_WRITE rubric criterion (scores
-     *  are clamped to each criterion's weight, so a big number = full). */
-    static String rubricGrade() {
-        ArrayNode criteria = JSON.createArrayNode();
-        for (String c : new String[] {"approach", "complexity", "edge_cases", "readability"}) {
-            criteria.addObject().put("criterion", c).put("score", 100).put("note", "solid");
-        }
-        return JSON.createObjectNode().set("criteria", criteria).toString();
+    /** How the fake grader behaves (F9 tests switch this; reset in @BeforeEach). */
+    public enum GraderMode { FULL, NO_EVIDENCE, DISAGREE }
+
+    public static volatile GraderMode graderMode = GraderMode.FULL;
+    private static final java.util.concurrent.atomic.AtomicInteger GRADER_CALLS = new java.util.concurrent.atomic.AtomicInteger();
+
+    public static void resetGrader() {
+        graderMode = GraderMode.FULL;
+        GRADER_CALLS.set(0);
     }
 
-    /** Fake AI grade: every key point (indices 1..12) covered. */
-    static String scenarioGrade() {
-        ArrayNode points = JSON.createArrayNode();
-        for (int i = 1; i <= 12; i++) points.addObject().put("index", i).put("covered", true).put("note", "");
-        return JSON.createObjectNode().set("key_points", points).toString();
+    private static final Pattern CRITERION = Pattern.compile("^- ([A-Za-z0-9_]+): .*\\(max ([0-9.]+)\\)$", Pattern.MULTILINE);
+
+    /** Fake rubric grade, built from the prompt: every listed criterion, with
+     *  evidence quoted from the candidate's answer between the markers.
+     *  FULL = max marks; NO_EVIDENCE = max marks but evidence not in the answer;
+     *  DISAGREE = successive runs award 100%, 0%, 50%. */
+    static String rubricGrade(String prompt) {
+        String answer = "";
+        int a = prompt.indexOf("<<<CANDIDATE_ANSWER"), b = prompt.indexOf("CANDIDATE_ANSWER>>>");
+        if (a >= 0 && b > a) answer = prompt.substring(prompt.indexOf('\n', a) + 1, b).trim();
+        String quote = answer.lines().map(String::trim).filter(l -> l.length() >= 3).findFirst().orElse(answer);
+        if (quote.length() > 40) quote = quote.substring(0, 40);
+
+        double share = switch (graderMode) {
+            case DISAGREE -> new double[] {1.0, 0.0, 0.5}[GRADER_CALLS.getAndIncrement() % 3];
+            default -> 1.0;
+        };
+        String evidence = graderMode == GraderMode.NO_EVIDENCE ? "a sentence the candidate never wrote" : quote;
+
+        ArrayNode criteria = JSON.createArrayNode();
+        Matcher m = CRITERION.matcher(prompt);
+        while (m.find()) {
+            double max = Double.parseDouble(m.group(2));
+            criteria.addObject().put("criterion", m.group(1)).put("score", max * share).put("max", max)
+                    .put("evidence", evidence).put("comment", "fake grade");
+        }
+        return JSON.createObjectNode().set("criteria", criteria).toString();
     }
 
     public static String typeOf(RecordedRequest req) {

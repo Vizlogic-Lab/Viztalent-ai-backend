@@ -67,6 +67,11 @@ public class AssessmentAnswer {
     @Column(nullable = false, columnDefinition = "jsonb")
     private List<Map<String, Object>> evidence = new ArrayList<>();
 
+    /** Per-question evaluation flags: HARDCODED, GRADER_DISAGREEMENT, RUBRIC_PENDING, RUBRIC_UNAVAILABLE. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false, columnDefinition = "jsonb")
+    private List<String> flags = new ArrayList<>();
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 }

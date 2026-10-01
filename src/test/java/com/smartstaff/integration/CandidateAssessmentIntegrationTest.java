@@ -205,8 +205,9 @@ class CandidateAssessmentIntegrationTest extends IntegrationTestBase {
         assertThat(v.path("auto_submitted").asBoolean()).isTrue();
         assertThat(v.path("message").asText()).contains("Time is up");
         // The saved answer survived the auto-submit.
-        assertThat(jdbc.queryForObject("select count(*) from attempt_answers a join assessment_attempts t "
-                + "on t.id = a.attempt_id where t.job_id = ?::uuid", Integer.class, job)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select a.selected_indices::text from attempt_answers a join assessment_attempts t "
+                + "on t.id = a.attempt_id where t.job_id = ?::uuid and a.question_id = ?::uuid", String.class, job, mcq))
+                .isEqualTo("[0]");
         // The only level is done, so the link is used up: running is refused.
         postJson("/api/assessment/run_by_token/" + token,
                 Map.of("question_id", mcq, "language", "java", "code", "x"))
@@ -237,7 +238,7 @@ class CandidateAssessmentIntegrationTest extends IntegrationTestBase {
         assertThat(subs.path("submissions")).hasSize(1);
         JsonNode row = subs.path("submissions").get(0);
         assertThat(row.path("candidate_email").asText()).isEqualTo("cand@example.com");
-        assertThat(row.path("status").asText()).isEqualTo("SUBMITTED");
+        assertThat(row.path("status").asText()).as("evaluated inline after submit").isEqualTo("EVALUATED");
         assertThat(row.path("answered").asInt()).isEqualTo(1);
         assertThat(row.path("num_questions").asInt()).isEqualTo(12);
         assertThat(row.path("version").asInt()).isEqualTo(1);

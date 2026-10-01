@@ -8,9 +8,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class AssessmentScoringListener {
 
-    private final AssessmentScoringJob job;
+    private final EvaluationJob job;
 
-    public AssessmentScoringListener(AssessmentScoringJob job) {
+    public AssessmentScoringListener(EvaluationJob job) {
         this.job = job;
     }
 

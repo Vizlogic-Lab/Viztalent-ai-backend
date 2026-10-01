@@ -13,6 +13,11 @@ public interface CodeRunRepository extends JpaRepository<CodeRun, UUID> {
 
     long countByAnswerIdAndMode(UUID answerId, CodeRunMode mode);
 
+    /** Re-evaluation replaces an answer's SUBMIT runs. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from CodeRun r where r.answer.id = :answerId and r.mode = :mode")
+    int deleteByAnswerIdAndMode(@Param("answerId") UUID answerId, @Param("mode") CodeRunMode mode);
+
     List<CodeRun> findByAnswerIdOrderByCreatedAtAsc(UUID answerId);
 
     /** Candidate runs per question for one attempt: [questionId, count]. */

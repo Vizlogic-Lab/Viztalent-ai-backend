@@ -25,8 +25,12 @@ class AssessmentScoringIntegrationTest extends IntegrationTestBase {
     private String token;
     private String assessmentId;
 
+    /** Real (input-reading) code; the fake runner treats the REFERENCE marker as a correct program. */
+    static final String REAL_CODE = "// REFERENCE\nScanner in = new Scanner(System.in);\nSystem.out.println(in.nextLong() + in.nextLong());";
+
     @BeforeEach
     void setUp() throws Exception {
+        PracticalStubs.resetGrader();
         admin = newAdmin();
         job = createJob(admin, "Java Backend Developer", "java, spring, sql");
         setPublicBaseUrl(admin, "https://public.example.com");
@@ -60,7 +64,7 @@ class AssessmentScoringIntegrationTest extends IntegrationTestBase {
                     json.readTree((String) r.get("ci")).forEach(n -> ci.add(n.asInt()));
                     answers.add(Map.of("question_id", id, "selected_indices", ci));
                 }
-                case "CODE_WRITE", "CODE_DEBUG" -> answers.add(Map.of("question_id", id, "language", "java", "code", "// REFERENCE"));
+                case "CODE_WRITE", "CODE_DEBUG" -> answers.add(Map.of("question_id", id, "language", "java", "code", REAL_CODE));
                 default -> answers.add(Map.of("question_id", id, "text", String.valueOf(r.get("model_answer"))));
             }
         }
@@ -97,7 +101,7 @@ class AssessmentScoringIntegrationTest extends IntegrationTestBase {
         assertThat(codeWrite).isNotNull();
         assertThat(codeWrite.path("score").asDouble()).isEqualTo(codeWrite.path("max_points").asDouble());
         assertThat(codeWrite.path("tests_passed").asInt()).isEqualTo(codeWrite.path("tests_total").asInt());
-        assertThat(codeWrite.path("tests_total").asInt()).as("all tests scored, visible and hidden").isGreaterThanOrEqualTo(11);
+        assertThat(codeWrite.path("tests_total").asInt()).as("correctness counts the 8 hidden tests only").isEqualTo(8);
         assertThat(codeWrite.path("breakdown")).hasSize(4);
     }
 

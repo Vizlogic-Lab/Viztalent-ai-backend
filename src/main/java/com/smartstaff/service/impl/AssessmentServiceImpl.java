@@ -43,7 +43,7 @@ public class AssessmentServiceImpl implements AssessmentService {
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final AssessmentAnswerRepository assessmentAnswerRepository;
     private final AssessmentScorecardRepository assessmentScorecardRepository;
-    private final AssessmentScoringJob assessmentScoringJob;
+    private final EvaluationJob evaluationJob;
     private final ScorecardPdfService scorecardPdfService;
     private final QuestionBankItemRepository questionBankItemRepository;
     private final JobRoleProfileRepository roleProfileRepository;
@@ -59,7 +59,7 @@ public class AssessmentServiceImpl implements AssessmentService {
                                   AssessmentAttemptRepository assessmentAttemptRepository,
                                   AssessmentAnswerRepository assessmentAnswerRepository,
                                   AssessmentScorecardRepository assessmentScorecardRepository,
-                                  AssessmentScoringJob assessmentScoringJob,
+                                  EvaluationJob evaluationJob,
                                   ScorecardPdfService scorecardPdfService,
                                   QuestionBankItemRepository questionBankItemRepository,
                                   JobRoleProfileRepository roleProfileRepository,
@@ -74,7 +74,7 @@ public class AssessmentServiceImpl implements AssessmentService {
         this.assessmentAttemptRepository = assessmentAttemptRepository;
         this.assessmentAnswerRepository = assessmentAnswerRepository;
         this.assessmentScorecardRepository = assessmentScorecardRepository;
-        this.assessmentScoringJob = assessmentScoringJob;
+        this.evaluationJob = evaluationJob;
         this.scorecardPdfService = scorecardPdfService;
         this.questionBankItemRepository = questionBankItemRepository;
         this.roleProfileRepository = roleProfileRepository;
@@ -99,7 +99,7 @@ public class AssessmentServiceImpl implements AssessmentService {
                     List.of(a.getLevel()),
                     a.getInvite().isCombined(),
                     a.getStatus().name(),
-                    (int) assessmentAnswerRepository.findByAttemptId(a.getId()).size(),
+                    (int) assessmentAnswerRepository.findByAttemptId(a.getId()).stream().filter(AssessmentServiceImpl::hasContent).count(),
                     numQuestions,
                     a.getStartedAt(),
                     a.getSubmittedAt(),
@@ -307,10 +307,18 @@ public class AssessmentServiceImpl implements AssessmentService {
     @Override
     public void rescore(UUID jobId, UUID attemptId) {
         AssessmentAttempt attempt = transaction.execute(s -> attemptForJob(jobId, attemptId));
-        if (attempt == null || attempt.getStatus() != AttemptStatus.SUBMITTED) {
+        if (attempt == null || !(attempt.getStatus() == AttemptStatus.SUBMITTED
+                || attempt.getStatus() == AttemptStatus.EVALUATING || attempt.getStatus() == AttemptStatus.EVALUATED)) {
             throw new ApiException(HttpStatus.CONFLICT, "This attempt hasn't been submitted, so there's nothing to score.");
         }
-        assessmentScoringJob.run(attemptId);
+        evaluationJob.rerun(attemptId);
+    }
+
+    /** Evaluation stores a graded row for every question; only rows with content were answered. */
+    private static boolean hasContent(AssessmentAnswer ans) {
+        return !ans.getSelectedIndices().isEmpty()
+                || (ans.getCode() != null && !ans.getCode().isBlank())
+                || (ans.getTextAnswer() != null && !ans.getTextAnswer().isBlank());
     }
 
     private AssessmentAttempt attemptForJob(UUID jobId, UUID attemptId) {

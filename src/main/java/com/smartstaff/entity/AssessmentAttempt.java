@@ -90,6 +90,22 @@ public class AssessmentAttempt {
     @Column(nullable = false, columnDefinition = "jsonb")
     private List<String> flags = new ArrayList<>();
 
+    @Column(name = "evaluation_started_at")
+    private Instant evaluationStartedAt;
+
+    @Column(name = "evaluated_at")
+    private Instant evaluatedAt;
+
+    /** When a rubric first couldn't be graded (Gemini down); retries stop an hour later. */
+    @Column(name = "rubric_pending_since")
+    private Instant rubricPendingSince;
+
+    @Column(name = "next_evaluation_at")
+    private Instant nextEvaluationAt;
+
+    @Column(name = "evaluation_tries", nullable = false)
+    private int evaluationTries;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AssessmentAnswer> answers = new ArrayList<>();
 
