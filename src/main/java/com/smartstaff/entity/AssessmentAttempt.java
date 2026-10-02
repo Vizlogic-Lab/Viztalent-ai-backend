@@ -89,6 +89,10 @@ public class AssessmentAttempt {
     @Column(length = 24)
     private String recommendation;
 
+    /** F15: the engine's verdict; recommendation becomes the SME's on sign-off. */
+    @Column(name = "engine_recommendation", length = 24)
+    private String engineRecommendation;
+
     @Column(name = "theory_band", length = 20)
     private String theoryBand;
 

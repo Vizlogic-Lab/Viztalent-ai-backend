@@ -127,6 +127,25 @@ public class QuestionBankItem {
     @Column(name = "validation_log", columnDefinition = "TEXT")
     private String validationLog;
 
+    /** F15: TOO_EASY / TOO_HARD / LOW_DISCRIMINATION from the latest stats refresh. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "quality_flags", nullable = false, columnDefinition = "jsonb")
+    private List<String> qualityFlags = new ArrayList<>();
+
+    /** Kept out of generation until an admin re-enables it. */
+    @Column(name = "quality_excluded", nullable = false)
+    private boolean qualityExcluded;
+
+    @Column(name = "quality_checked_at")
+    private Instant qualityCheckedAt;
+
+    /** Stats only count attempts submitted after this (a fresh window after a re-enable). */
+    @Column(name = "quality_reenabled_at")
+    private Instant qualityReenabledAt;
+
+    @Column(name = "quality_reenabled_by")
+    private String qualityReenabledBy;
+
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("seq ASC")
     private List<QuestionBankTestCase> testCases = new ArrayList<>();

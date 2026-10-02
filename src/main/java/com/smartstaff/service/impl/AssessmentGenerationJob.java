@@ -332,7 +332,7 @@ public class AssessmentGenerationJob {
         }
     }
 
-    /** Validated bank questions for the slot: same type and level; skill is
+    /** Validated bank questions for the slot, minus those excluded for quality (F15): same type and level; skill is
      *  the target, another profile skill, or unset; role families include the
      *  job's (or are empty); coding ones share a language with the job, and
      *  only the shared languages are kept. Items this job's earlier versions
@@ -346,7 +346,7 @@ public class AssessmentGenerationJob {
         Deque<QuestionDraft> drafts = tx.execute(s -> {
             List<QuestionBankItem> items = new ArrayList<>();
             for (QuestionBankItem item : bank.findByLevelOrLevelIsNull(w.level())) {
-                if (!item.isValidated() || run.usedBankItems.contains(item.getId())) continue;
+                if (!item.isValidated() || item.isQualityExcluded() || run.usedBankItems.contains(item.getId())) continue;
                 if (!slot.type().name().equals(item.getType())) continue;
                 String skill = item.getSkill() == null ? "" : item.getSkill().trim().toLowerCase(Locale.ROOT);
                 if (!skill.isEmpty() && !run.profileSkills.isEmpty()

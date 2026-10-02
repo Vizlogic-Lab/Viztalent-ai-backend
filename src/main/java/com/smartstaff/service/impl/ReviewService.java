@@ -25,7 +25,10 @@ import java.util.*;
 @Service
 public class ReviewService {
 
-    public record Adjustment(String question_id, BigDecimal sme_score, String reason) {}
+    /** criteria (optional, F15): the SME's score per rubric criterion, on the engine's criterion scale. */
+    public record Adjustment(String question_id, BigDecimal sme_score, String reason, List<CriterionScore> criteria) {}
+
+    public record CriterionScore(String criterion, BigDecimal sme_score) {}
 
     public record AttemptDecision(List<Adjustment> adjustments, String theory_band, String hands_on_band,
                                   String recommendation, String comment, String action) {}
@@ -261,14 +264,17 @@ public class ReviewService {
                 }
                 if (blank(adj.reason())) throw new ApiException(HttpStatus.BAD_REQUEST, "Every adjustment needs a reason.");
                 BigDecimal sme = adj.sme_score().setScale(2, RoundingMode.HALF_UP);
+                Map<String, BigDecimal> criteria = criteria(qid, ans, adj.criteria());
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("question_id", qid.toString());
                 m.put("auto_score", ans.getFinalScore());
                 m.put("sme_score", sme);
                 m.put("reason", adj.reason().trim());
+                if (criteria != null) m.put("criteria", criteria);
                 applied.add(m);
                 ans.setSmeScore(sme);
                 ans.setSmeReason(adj.reason().trim());
+                ans.setSmeCriteria(criteria);
                 ans.setFinalScore(sme);
                 answers.save(ans);
             }
@@ -296,6 +302,29 @@ public class ReviewService {
                     + " result validated by " + actor.getName() + ": " + a.getRecommendation(), a.getId());
             return row(r);
         });
+    }
+
+    /** Validates SME criterion scores against the engine's graded criteria (id → max); null when none given. */
+    private static Map<String, BigDecimal> criteria(UUID qid, AssessmentAnswer ans, List<CriterionScore> given) {
+        if (given == null || given.isEmpty()) return null;
+        record Graded(String id, double max) {}
+        Map<String, Graded> graded = new HashMap<>();
+        for (Map<String, Object> e : ans.getEvidence()) {
+            if ("criterion".equals(e.get("kind")) && e.get("criterion") != null && e.get("max") instanceof Number max) {
+                String id = String.valueOf(e.get("criterion"));
+                graded.put(id.toLowerCase(Locale.ROOT), new Graded(id, max.doubleValue()));
+            }
+        }
+        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        for (CriterionScore c : given) {
+            Graded g = c.criterion() == null ? null : graded.get(c.criterion().trim().toLowerCase(Locale.ROOT));
+            if (g == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Question " + qid + " has no graded criterion '" + c.criterion() + "'.");
+            if (c.sme_score() == null || c.sme_score().signum() < 0 || c.sme_score().doubleValue() > g.max()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Criterion " + g.id() + " of " + qid + " must be scored between 0 and " + g.max() + ".");
+            }
+            out.put(g.id(), c.sme_score().setScale(2, RoundingMode.HALF_UP));
+        }
+        return out;
     }
 
     /** Scores, bands, gate, evidence and template summary from the stored (now adjusted) answers. */

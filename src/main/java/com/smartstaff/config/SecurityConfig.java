@@ -95,6 +95,7 @@ public class SecurityConfig {
                         // this, an employee sending an invalid body got a 400 instead. The
                         // @PreAuthorize annotations on the controllers stay as a second lock.
                         .requestMatchers("/api/config", "/api/config/**", "/api/reset").hasRole("ADMIN")
+                        .requestMatchers("/api/analytics", "/api/analytics/**").hasRole("ADMIN")
                         .requestMatchers("/api/auth/accounts", "/api/auth/approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/questions/upload", "/api/questions/clear").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/questions/upload/*").hasRole("ADMIN")

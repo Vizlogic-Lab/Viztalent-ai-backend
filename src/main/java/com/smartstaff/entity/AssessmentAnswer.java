@@ -79,6 +79,15 @@ public class AssessmentAnswer {
     @Column(name = "sme_reason", columnDefinition = "TEXT")
     private String smeReason;
 
+    /** F15: the engine's own final score; never changed by an SME. */
+    @Column(name = "engine_score", precision = 8, scale = 2)
+    private BigDecimal engineScore;
+
+    /** F15: optional per-criterion SME scores given with an adjustment (criterion → score). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "sme_criteria", columnDefinition = "jsonb")
+    private Map<String, BigDecimal> smeCriteria;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 }

@@ -225,27 +225,41 @@ public class EvaluationJob {
         List<Item> items = new ArrayList<>();
         for (AssessmentQuestion q : questions.findByAssessmentIdOrderByLevelAscSeqAsc(a.getAssessment().getId())) {
             if (!a.getLevel().equals(q.getLevel())) continue;
-            List<TestData> tests = q.getTestCases().stream()
-                    .map(t -> new TestData(t.getSeq(), t.getInput(), t.getExpectedOutput(), t.isVisible(), t.getCategory(),
-                            t.getWeight(), t.getFloatTolerance()))
-                    .toList();
-            AssessmentAnswer ans = byQuestion.get(q.getId());
-            items.add(new Item(q.getId(), q.getLevel(), q.getSeq(), q.getType(), q.getDimension(), q.getCompetency(),
-                    q.getPoints(), q.getSkill(),
-                    List.copyOf(q.getCorrectIndices()), q.getModelAnswer(), List.copyOf(q.getKeyPoints()), q.getPrompt(),
-                    q.getExpectedComplexity(), List.copyOf(q.getRubric()), Map.copyOf(q.getStarterCode()),
-                    Map.copyOf(q.getReferenceSolution()), List.copyOf(q.getLanguages()), tests,
-                    json.convertValue(mapper.toCandidateView(q), new TypeReference<Map<String, Object>>() {}),
-                    ans == null ? null : ans.getId(),
-                    ans == null ? List.of() : List.copyOf(ans.getSelectedIndices()),
-                    ans == null ? null : ans.getLanguage(), ans == null ? null : ans.getCode(),
-                    ans == null ? null : ans.getTextAnswer(),
-                    ans == null ? List.of() : List.copyOf(ans.getFlags()),
-                    ans == null ? null : ans.getAutoScore(), ans == null ? null : ans.getFinalScore(),
-                    ans == null ? List.of() : List.copyOf(ans.getEvidence()),
-                    ans == null || ans.getRubricScore() == null ? List.of() : List.copyOf(ans.getRubricScore())));
+            items.add(item(q, byQuestion.get(q.getId())));
         }
         return new Snapshot(attemptId, settings.getGeminiApiKeyOrNull(), items);
+    }
+
+    /** Must run inside a transaction (reads the question's test cases). ans may be null or unsaved. */
+    Item item(AssessmentQuestion q, AssessmentAnswer ans) {
+        List<TestData> tests = q.getTestCases().stream()
+                .map(t -> new TestData(t.getSeq(), t.getInput(), t.getExpectedOutput(), t.isVisible(), t.getCategory(),
+                        t.getWeight(), t.getFloatTolerance()))
+                .toList();
+        return new Item(q.getId(), q.getLevel(), q.getSeq(), q.getType(), q.getDimension(), q.getCompetency(),
+                q.getPoints(), q.getSkill(),
+                List.copyOf(q.getCorrectIndices()), q.getModelAnswer(), List.copyOf(q.getKeyPoints()), q.getPrompt(),
+                q.getExpectedComplexity(), List.copyOf(q.getRubric()), Map.copyOf(q.getStarterCode()),
+                Map.copyOf(q.getReferenceSolution()), List.copyOf(q.getLanguages()), tests,
+                json.convertValue(mapper.toCandidateView(q), new TypeReference<Map<String, Object>>() {}),
+                ans == null ? null : ans.getId(),
+                ans == null ? List.of() : List.copyOf(ans.getSelectedIndices()),
+                ans == null ? null : ans.getLanguage(), ans == null ? null : ans.getCode(),
+                ans == null ? null : ans.getTextAnswer(),
+                ans == null ? List.of() : List.copyOf(ans.getFlags()),
+                ans == null ? null : ans.getAutoScore(), ans == null ? null : ans.getFinalScore(),
+                ans == null ? List.of() : List.copyOf(ans.getEvidence()),
+                ans == null || ans.getRubricScore() == null ? List.of() : List.copyOf(ans.getRubricScore()));
+    }
+
+    // ── F15 calibration: the same grading, nothing stored ───────────────
+
+    public record DryRun(BigDecimal score, List<String> flags, List<Map<String, Object>> evidence) {}
+
+    /** Grades an item built by {@link #item} exactly as evaluation would. Call outside any transaction. */
+    DryRun dryRun(Item item) {
+        Graded g = grade(item, settings.getGeminiApiKeyOrNull());
+        return new DryRun(g.fin(), g.flags(), g.evidence());
     }
 
     // ── grading one question (outside any transaction) ──────────────────
@@ -541,6 +555,7 @@ public class EvaluationJob {
         a.setHandsOnBand(r.handsOnBand());
         a.setCompetencyScores(new LinkedHashMap<>(r.competencies()));
         a.setRecommendation(r.recommendation());
+        a.setEngineRecommendation(r.recommendation());
         a.setEvidenceLines(new ArrayList<>(lines));
         Set<String> flags = new TreeSet<>(a.getFlags());
         flags.addAll(r.flags());
@@ -565,6 +580,7 @@ public class EvaluationJob {
         ans.setAutoScore(g.auto());
         ans.setRubricScore(g.rubricRuns().isEmpty() ? null : new ArrayList<>(g.rubricRuns()));
         ans.setFinalScore(g.fin());
+        ans.setEngineScore(g.fin());
         ans.setEvidence(new ArrayList<>(g.evidence()));
         ans.setFlags(new ArrayList<>(g.flags()));
         ans = answers.save(ans);
