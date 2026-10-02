@@ -208,6 +208,12 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.candidates.length()").value(1))
                 .andExpect(jsonPath("$.candidates[0].Candidate_Name").value("Priya Nair"));
 
+        // F14: the services write the feed — one event per upload / screening run, newest first.
+        uploadResumes(owner, job, "b.txt", PRIYA, "c.txt", PRIYA).andExpect(status().isOk());
+        assertThat(bodyOf(getAs(owner, "/api/activity/" + job)).path("activity").findValuesAsText("message"))
+                .containsExactly("2 resumes uploaded", "Screened 1 candidate — 1 scored 50 or above.",
+                        "Resume uploaded: a.txt", "JD uploaded: Senior Java Developer");
+
         // The frontend opens this as a plain <a href> with no bearer token, so it signs the path first.
         String url = bodyOf(postJsonAs(owner, "/api/downloads/sign", Map.of("path", "/api/download_report"))
                 .andExpect(status().isOk())).path("url").asText();

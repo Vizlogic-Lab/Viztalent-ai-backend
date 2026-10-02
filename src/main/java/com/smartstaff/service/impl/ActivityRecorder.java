@@ -12,6 +12,9 @@ import java.util.UUID;
 @Component
 public class ActivityRecorder {
 
+    public static final String JD = "jd";
+    public static final String RESUMES = "resumes";
+    public static final String SCREENING = "screening";
     public static final String ASSESSMENT = "assessment";
     public static final String INVITE = "invite";
     public static final String SUBMISSION = "submission";

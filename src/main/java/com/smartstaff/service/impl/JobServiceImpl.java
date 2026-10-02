@@ -50,6 +50,7 @@ public class JobServiceImpl implements JobService {
     private final int maxRetainedJobs;
     private final ApplicationEventPublisher events;
     private final RoleProfileService roleProfileService;
+    private final ActivityRecorder activity;
 
     public JobServiceImpl(
             JobRepository jobRepository,
@@ -63,8 +64,10 @@ public class JobServiceImpl implements JobService {
             ExperienceParser experienceParser,
             @Value("${app.jobs.max-retained}") int maxRetainedJobs,
             ApplicationEventPublisher events,
-            RoleProfileService roleProfileService
+            RoleProfileService roleProfileService,
+            ActivityRecorder activity
     ) {
+        this.activity = activity;
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
         this.candidateRepository = candidateRepository;
@@ -117,6 +120,7 @@ public class JobServiceImpl implements JobService {
         applyOwner(job, owner);
 
         jobRepository.save(job);
+        activity.record(job.getId(), ActivityRecorder.JD, "JD uploaded: " + job.getTitle(), job.getId());
         events.publishEvent(new JdUploadedEvent(job.getId()));
         List<EvictedJobResponse> evicted = evictOldestBeyondCap();
 
@@ -171,6 +175,7 @@ public class JobServiceImpl implements JobService {
         applyOwner(job, owner);
 
         jobRepository.save(job);
+        activity.record(job.getId(), ActivityRecorder.JD, "JD uploaded: " + job.getTitle(), job.getId());
         events.publishEvent(new JdUploadedEvent(job.getId()));
         List<EvictedJobResponse> evicted = evictOldestBeyondCap();
 
@@ -211,6 +216,9 @@ public class JobServiceImpl implements JobService {
         }
 
         int count = files.size();
+        activity.record(jobId, ActivityRecorder.RESUMES,
+                count == 1 ? "Resume uploaded: " + takenNames.get(takenNames.size() - 1)
+                        : count + " resumes uploaded", null);
         String reply = "Got " + count + " resume" + (count == 1 ? "" : "s") + ".";
         return new ResumeUploadResponse("success", reply, true);
     }

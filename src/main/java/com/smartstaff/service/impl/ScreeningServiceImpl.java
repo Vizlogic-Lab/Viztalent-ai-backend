@@ -45,6 +45,7 @@ public class ScreeningServiceImpl implements ScreeningService {
     private final CandidateMapper candidateMapper;
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
+    private final ActivityRecorder activity;
 
     public ScreeningServiceImpl(
             JobRepository jobRepository,
@@ -52,8 +53,10 @@ public class ScreeningServiceImpl implements ScreeningService {
             CandidateRepository candidateRepository,
             CandidateMapper candidateMapper,
             SkillDictionary skillDictionary,
-            ExperienceParser experienceParser
+            ExperienceParser experienceParser,
+            ActivityRecorder activity
     ) {
+        this.activity = activity;
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
         this.candidateRepository = candidateRepository;
@@ -99,6 +102,7 @@ public class ScreeningServiceImpl implements ScreeningService {
         int shortlisted = (int) scored.stream().filter(c -> c.getFitScore() >= 50).count();
         String reply = "Screened " + scored.size() + " candidate" + (scored.size() == 1 ? "" : "s")
                 + " — " + shortlisted + " scored 50 or above.";
+        activity.record(jobId, ActivityRecorder.SCREENING, reply, null);
 
         return new RunScreeningResponse(reply, rows);
     }

@@ -132,7 +132,7 @@ class ScorecardDashboardActivityIntegrationTest extends IntegrationTestBase {
         // Activity feed: written by the services.
         JsonNode feed = bodyOf(getAs(admin, "/api/activity/" + job + "?limit=50").andExpect(status().isOk()));
         List<String> kinds = feed.findValuesAsText("kind");
-        assertThat(kinds).contains("assessment", "invite", "submission", "evaluation", "validation");
+        assertThat(kinds).contains("jd", "assessment", "invite", "submission", "evaluation", "validation");
         assertThat(feed.toString()).contains("Assessment v1 generated", "Casey Candidate submitted L1",
                 "result validated by Dr Scorecard: PROCEED");
 
