@@ -142,6 +142,9 @@ class ResultsIntegrationTest extends IntegrationTestBase {
         assertThat(code.path("runs").get(0).path("mode").asText()).isEqualTo("SUBMIT");
         assertThat(code.path("evidence").toString()).contains("hidden_passed");
         assertThat(code.path("rubric_runs")).hasSize(2);
+        // F13: the answer key rides along for the side-by-side review (HR/SME only endpoint).
+        assertThat(code.path("answer_key").path("reference_solution").size()).isPositive();
+        assertThat(code.path("answer_key").path("tests").findValuesAsText("visible")).contains("false");
         assertThat(full.path("summary").path("theory_line").asText()).isNotBlank();
         assertThat(full.path("event_counts").path("TAB_SWITCH").asInt()).isZero();
         assertThat(full.path("evidence_lines").isArray()).isTrue();
@@ -151,6 +154,7 @@ class ResultsIntegrationTest extends IntegrationTestBase {
         assertThat(st.path("num_evaluated").asInt()).isEqualTo(1);
         assertThat(st.path("latest_submission_at").isMissingNode()).isFalse();
         assertThat(st.path("recommendations").path(row.path("recommendation").asText()).asInt()).isEqualTo(1);
+        assertThat(st.path("approval_status").isMissingNode()).as("no approval policy → no approval state").isTrue();
     }
 
     @Test

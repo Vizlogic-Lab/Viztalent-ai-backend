@@ -5,6 +5,7 @@ import com.smartstaff.dto.response.AssessmentSubmissionsResponse.SubmissionSumma
 import com.smartstaff.dto.response.AttemptReviewResponse;
 import com.smartstaff.entity.*;
 import com.smartstaff.exception.ApiException;
+import com.smartstaff.mapper.AssessmentMapper;
 import com.smartstaff.repository.*;
 import com.smartstaff.service.ResultsService;
 import org.springframework.http.HttpStatus;
@@ -25,11 +26,13 @@ public class ResultsServiceImpl implements ResultsService {
     private final AttemptEventRepository events;
     private final SmeReviewRepository reviews;
     private final UserRepository users;
+    private final AssessmentMapper mapper;
 
     public ResultsServiceImpl(JobRepository jobs, AssessmentAttemptRepository attempts, AssessmentAnswerRepository answers,
                               AssessmentQuestionRepository questions, AssessmentScorecardRepository scorecards,
                               CodeRunRepository codeRuns, AttemptEventRepository events, SmeReviewRepository reviews,
-                              UserRepository users) {
+                              UserRepository users, AssessmentMapper mapper) {
+        this.mapper = mapper;
         this.reviews = reviews;
         this.users = users;
         this.jobs = jobs;
@@ -161,7 +164,8 @@ public class ResultsServiceImpl implements ResultsService {
                     ans == null ? List.of() : ans.getFlags(),
                     ans == null ? List.of() : ans.getEvidence(),
                     ans == null ? null : ans.getRubricScore(),
-                    runs));
+                    runs,
+                    mapper.toQuestionResponse(q)));
         }
 
         List<AttemptEvent> evs = events.findByAttemptIdOrderByAtAsc(attemptId);

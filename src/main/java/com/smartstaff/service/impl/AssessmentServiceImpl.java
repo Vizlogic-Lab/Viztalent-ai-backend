@@ -100,13 +100,13 @@ public class AssessmentServiceImpl implements AssessmentService {
         Optional<Job> job = jobRepository.findById(jobId);
         if (job.isEmpty()) {
             return new AssessmentStatusResponse(true, false, null, 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
         Optional<Assessment> latest = assessmentRepository.findTopByJobIdOrderByVersionDesc(jobId);
         Optional<Assessment> current = assessmentRepository.findByJobIdAndCurrentTrue(jobId);
         if (latest.isEmpty()) {
             return new AssessmentStatusResponse(true, true, job.get().getTitle(), 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
 
         Assessment a = latest.get();
@@ -141,6 +141,9 @@ public class AssessmentServiceImpl implements AssessmentService {
                 if ("PROCEED".equals(at.getRecommendation())) passed++;
             }
         }
+        // F13: the SME question-set review of the version invites use (if the job requires one).
+        Optional<SmeReview> approval = smeReviewRepository.findBySubjectTypeAndSubjectId(
+                SmeReview.Subject.QUESTION_SET, current.orElse(a).getId());
         return new AssessmentStatusResponse(
                 true,
                 true,
@@ -163,7 +166,9 @@ public class AssessmentServiceImpl implements AssessmentService {
                 p.errors() == null ? List.of() : p.errors(),
                 evaluated,
                 passed,
-                recommendations);
+                recommendations,
+                approval.map(r -> r.getStatus().name()).orElse(null),
+                approval.map(SmeReview::getComment).orElse(null));
     }
 
     @Override

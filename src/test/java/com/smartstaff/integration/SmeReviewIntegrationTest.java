@@ -113,6 +113,7 @@ class SmeReviewIntegrationTest extends IntegrationTestBase {
         String review = reviewFor(assessment);
 
         JsonNode blocked = bodyOf(postJsonAs(admin, "/api/invites/mint", mintBody()).andExpect(status().isConflict()));
+        assertThat(bodyOf(getAs(admin, "/api/assessment/status/" + job)).path("approval_status").asText()).isEqualTo("PENDING");
         assertThat(blocked.toString()).contains("awaiting expert approval");
 
         JsonNode queue = bodyOf(getAs(sme, "/api/review/queue?subject_type=QUESTION_SET").andExpect(status().isOk()));
@@ -128,6 +129,9 @@ class SmeReviewIntegrationTest extends IntegrationTestBase {
         postJsonAs(sme, "/api/review/question_sets/" + review, Map.of("action", "APPROVE", "comment", "Good set"))
                 .andExpect(status().isOk());
         postJsonAs(admin, "/api/invites/mint", mintBody()).andExpect(status().isOk());
+        JsonNode st = bodyOf(getAs(admin, "/api/assessment/status/" + job));
+        assertThat(st.path("approval_status").asText()).isEqualTo("APPROVED");
+        assertThat(st.path("approval_comment").asText()).isEqualTo("Good set");
         // Approved and locked: no more edits from the review.
         putJsonAs(sme, "/api/review/question_sets/" + review + "/questions/" + mcq.path("question_id").asText(),
                 Map.of("points", 8)).andExpect(status().isConflict());

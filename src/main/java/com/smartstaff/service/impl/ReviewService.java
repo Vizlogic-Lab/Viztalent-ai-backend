@@ -107,12 +107,14 @@ public class ReviewService {
                 reviews.findOverdue(OPEN, Instant.now()).stream().map(this::row).toList()));
     }
 
-    /** One review with its audit trail; a question set also carries its questions. */
-    public Map<String, Object> get(UUID reviewId) {
+    /** One review with its audit trail; a question set also carries its questions.
+     *  claimed_by_me tells the SME screens whether this user may act on it now. */
+    public Map<String, Object> get(UUID reviewId, User actor) {
         return tx.execute(s -> {
             SmeReview r = review(reviewId);
             Map<String, Object> out = new LinkedHashMap<>(row(r));
             out.put("ok", true);
+            out.put("claimed_by_me", actor != null && actor.getId().equals(r.getReviewerId()));
             out.put("adjustments", r.getAdjustments());
             out.put("final_theory_band", r.getFinalTheoryBand());
             out.put("final_hands_on_band", r.getFinalHandsOnBand());

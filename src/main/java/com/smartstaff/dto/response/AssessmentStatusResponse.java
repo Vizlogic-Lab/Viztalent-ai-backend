@@ -35,5 +35,9 @@ public record AssessmentStatusResponse(
         /* F10: attempts with a result, and how many of those are PROCEED. */
         Integer num_evaluated,
         Integer num_passed,
-        Map<String, Integer> recommendations
+        Map<String, Integer> recommendations,
+        /* F13: PENDING / IN_REVIEW / APPROVED / RETURNED when the version needs SME approval; null otherwise.
+         * Invites are refused (409 awaiting_expert_approval) until APPROVED. */
+        String approval_status,
+        String approval_comment
 ) {}

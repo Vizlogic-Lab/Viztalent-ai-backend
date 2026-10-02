@@ -43,7 +43,9 @@ public record AttemptReviewResponse(
             List<String> flags,
             List<Map<String, Object>> evidence,
             List<Map<String, Object>> rubric_runs,
-            List<RunView> runs
+            List<RunView> runs,
+            /* F13: the answer key (reference/fixed code, all tests, rubric) for the side-by-side review. */
+            AssessmentQuestionResponse answer_key
     ) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

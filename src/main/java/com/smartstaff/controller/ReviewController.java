@@ -67,8 +67,8 @@ public class ReviewController {
 
     @GetMapping("/api/review/{reviewId}")
     @PreAuthorize("@jobAccess.canReviewReview(#reviewId, authentication)")
-    public ResponseEntity<Map<String, Object>> get(@PathVariable UUID reviewId) {
-        return ResponseEntity.ok(reviews.get(reviewId));
+    public ResponseEntity<Map<String, Object>> get(@PathVariable UUID reviewId, @AuthenticationPrincipal User actor) {
+        return ResponseEntity.ok(reviews.get(reviewId, actor));
     }
 
     @PostMapping("/api/review/{reviewId}/claim")
