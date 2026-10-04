@@ -16,16 +16,13 @@ import com.smartstaff.repository.InviteRepository;
 import com.smartstaff.repository.JobRepository;
 import com.smartstaff.service.InviteService;
 import com.smartstaff.service.SettingsService;
-import com.smartstaff.util.FileStorageService;
+import com.smartstaff.util.InviteLinks;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,8 +42,7 @@ import java.util.UUID;
 @Service
 public class InviteServiceImpl implements InviteService {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
-
+    private final EmailService emailService;
     private final ActivityRecorder activity;
     private final JobRepository jobRepository;
     private final InviteRepository inviteRepository;
@@ -60,7 +56,8 @@ public class InviteServiceImpl implements InviteService {
                              AssessmentRepository assessmentRepository,
                              AssessmentQuestionRepository assessmentQuestionRepository,
                              CandidateRepository candidateRepository, ReviewRouter reviewRouter,
-            ActivityRecorder activity) {
+            ActivityRecorder activity, EmailService emailService) {
+        this.emailService = emailService;
         this.activity = activity;
         this.reviewRouter = reviewRouter;
         this.jobRepository = jobRepository;
@@ -101,14 +98,13 @@ public class InviteServiceImpl implements InviteService {
         }
 
         long ttlSeconds = settingsService.getInviteTtlSeconds();
-        String createdBy = admin == null ? null : admin.publicId();
         List<InviteResponse> out = new ArrayList<>();
 
         if (req.combined()) {
-            out.add(mintOne(job, assessment, req, levels, true, ttlSeconds, createdBy));
+            out.add(mintOne(job, assessment, req, levels, true, ttlSeconds, admin));
         } else {
             for (String level : levels) {
-                out.add(mintOne(job, assessment, req, List.of(level), false, ttlSeconds, createdBy));
+                out.add(mintOne(job, assessment, req, List.of(level), false, ttlSeconds, admin));
             }
         }
 
@@ -116,11 +112,11 @@ public class InviteServiceImpl implements InviteService {
     }
 
     private InviteResponse mintOne(Job job, Assessment assessment, InviteMintRequest req, List<String> levels, boolean combined,
-                                    long ttlSeconds, String createdBy) {
-        String rawToken = randomToken();
+                                    long ttlSeconds, User admin) {
+        String rawToken = InviteLinks.newToken();
 
         Invite invite = new Invite();
-        invite.setTokenHash(FileStorageService.sha256Hex(rawToken.getBytes(StandardCharsets.UTF_8)));
+        invite.setTokenHash(InviteLinks.hash(rawToken));
         invite.setKind("ASSESSMENT");
         invite.setJob(job);
         invite.setAssessment(assessment);
@@ -132,24 +128,16 @@ public class InviteServiceImpl implements InviteService {
         invite.setLevels(levels);
         invite.setCombined(combined);
         invite.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
-        invite.setCreatedBy(createdBy);
+        invite.setCreatedBy(admin == null ? null : admin.publicId());
         inviteRepository.save(invite);
         activity.record(job.getId(), ActivityRecorder.INVITE, "Assessment invite sent to "
                 + ActivityRecorder.who(invite.getCandidateName(), invite.getCandidateEmail())
                 + " (" + String.join(", ", levels) + ")", invite.getId());
 
-        String levelParam = String.join(",", levels);
-        String paramName = combined ? "levels" : "level";
-        String url = settingsService.getPublicBaseUrl() + "/assessment/" + job.jdNumberDisplay()
-                + "?" + paramName + "=" + levelParam + "&token=" + rawToken;
-
-        return new InviteResponse(levelParam, url, ttlSeconds);
-    }
-
-    private static String randomToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String url = InviteLinks.assessment(settingsService.getPublicBaseUrl(), job.jdNumberDisplay(), levels, combined, rawToken);
+        EmailService.Queued email = Boolean.TRUE.equals(req.send_email())
+                ? emailService.queueInvite(invite, job.getTitle(), url, rawToken, admin) : null;
+        return new InviteResponse(String.join(",", levels), url, ttlSeconds, email);
     }
 
     private static UUID parseSessionId(String sessionId) {

@@ -17,6 +17,7 @@ import com.smartstaff.service.InterviewCompletedEvent;
 import com.smartstaff.service.InterviewService;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.FileStorageService;
+import com.smartstaff.util.InviteLinks;
 import com.smartstaff.util.RoleProfileRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -46,7 +46,6 @@ import java.util.stream.Collectors;
 public class InterviewServiceImpl implements InterviewService {
 
     private static final Logger log = LoggerFactory.getLogger(InterviewServiceImpl.class);
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final String DEFAULT_LANGUAGE = "en-IN";
 
     private final JobRepository jobRepository;
@@ -64,6 +63,7 @@ public class InterviewServiceImpl implements InterviewService {
     private final GeminiClient geminiClient;
     private final InterviewEvaluationJob evaluation;
     private final ApplicationEventPublisher events;
+    private final EmailService emailService;
     private final TransactionTemplate tx;
 
     public InterviewServiceImpl(JobRepository jobRepository,
@@ -81,7 +81,9 @@ public class InterviewServiceImpl implements InterviewService {
                                  GeminiClient geminiClient,
                                  InterviewEvaluationJob evaluation,
                                  ApplicationEventPublisher events,
-                                 PlatformTransactionManager transactionManager) {
+                                 PlatformTransactionManager transactionManager,
+                                 EmailService emailService) {
+        this.emailService = emailService;
         this.jobRepository = jobRepository;
         this.candidateRepository = candidateRepository;
         this.interviewRepository = interviewRepository;
@@ -129,11 +131,12 @@ public class InterviewServiceImpl implements InterviewService {
             return InterviewMintResponse.error(e.getMessage());
         }
 
-        String rawToken = randomToken();
-        tx.executeWithoutResult(s -> {
+        String rawToken = InviteLinks.newToken();
+        String url = InviteLinks.interview(settingsService.getPublicBaseUrl(), rawToken);
+        EmailService.Queued email = tx.execute(s -> {
             Interview interview = interviewRepository.getReferenceById(prepared.interview().getId());
             Invite invite = new Invite();
-            invite.setTokenHash(FileStorageService.sha256Hex(rawToken.getBytes(StandardCharsets.UTF_8)));
+            invite.setTokenHash(InviteLinks.hash(rawToken));
             invite.setKind("INTERVIEW");
             invite.setJob(jobRepository.getReferenceById(prepared.jobId()));
             invite.setInterview(interview);
@@ -143,10 +146,10 @@ public class InterviewServiceImpl implements InterviewService {
             invite.setExpiresAt(Instant.now().plusSeconds(settingsService.getInviteTtlSeconds()));
             invite.setCreatedBy(admin == null ? null : admin.publicId());
             inviteRepository.save(invite);
+            return Boolean.TRUE.equals(req.send_email())
+                    ? emailService.queueInvite(invite, prepared.interview().getRoleTitle(), url, rawToken, admin) : null;
         });
-
-        String url = settingsService.getPublicBaseUrl() + "/interview/" + rawToken;
-        return InterviewMintResponse.success(url);
+        return InterviewMintResponse.success(url, email);
     }
 
     @Override
@@ -524,12 +527,6 @@ public class InterviewServiceImpl implements InterviewService {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────
-
-    private static String randomToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
 
     private static UUID parseUuid(String value, String errorMessage) {
         try {

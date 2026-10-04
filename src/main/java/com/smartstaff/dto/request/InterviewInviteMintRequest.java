@@ -12,5 +12,7 @@ public record InterviewInviteMintRequest(
         String candidate_name,
         String phone,
         String file_name,
-        String language
+        String language,
+        /** F17: also email the link from the backend (when SMTP is configured). */
+        Boolean send_email
 ) {}

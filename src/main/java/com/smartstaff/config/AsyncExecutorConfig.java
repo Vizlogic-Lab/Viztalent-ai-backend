@@ -40,6 +40,19 @@ public class AsyncExecutorConfig {
         return executor;
     }
 
+    /** F17: sending emails over SMTP (each send is bounded by a 10 s timeout). */
+    @Bean(name = "emailExecutor")
+    public Executor emailExecutor(@Value("${app.async.inline:false}") boolean inline) {
+        if (inline) return new SyncTaskExecutor();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("email-");
+        executor.initialize();
+        return executor;
+    }
+
     /** Scoring a submitted attempt: runs the candidate's code and calls Gemini. */
     @Bean(name = "scoringExecutor")
     public Executor scoringExecutor(@Value("${app.async.inline:false}") boolean inline) {

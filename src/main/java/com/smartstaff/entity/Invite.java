@@ -79,6 +79,10 @@ public class Invite {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** F17: when the 24-hours-before-expiry reminder email went out. */
+    @Column(name = "reminder_sent_at")
+    private Instant reminderSentAt;
+
     public boolean isExpired() {
         return Instant.now().isAfter(expiresAt);
     }

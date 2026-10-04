@@ -34,4 +34,10 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
     @Transactional
     @Query("update Invite i set i.usedAt = :now where i.id = :id and i.usedAt is null and i.expiresAt > :now")
     int consume(@Param("id") UUID id, @Param("now") Instant now);
+
+    /** F17: unused invites expiring within the window whose invite email went out and that have had no reminder. */
+    @Query("select i from Invite i where i.usedAt is null and i.reminderSentAt is null and i.expiresAt > :now "
+            + "and i.expiresAt <= :until and exists (select 1 from EmailLog e where e.inviteId = i.id and e.status = 'SENT' "
+            + "and e.template in ('ASSESSMENT_INVITE', 'INTERVIEW_INVITE'))")
+    List<Invite> findDueReminders(@Param("now") Instant now, @Param("until") Instant until);
 }

@@ -10,5 +10,7 @@ public record InviteMintRequest(
         @NotBlank String candidate_email,
         String candidate_name,
         @NotEmpty List<String> levels,
-        boolean combined
+        boolean combined,
+        /** F17: also email the link from the backend (when SMTP is configured). */
+        Boolean send_email
 ) {}

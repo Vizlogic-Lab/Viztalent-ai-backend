@@ -49,6 +49,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- F17: invite / reminder / rejection emails over the SMTP server set in Settings. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.postgresql</groupId>
@@ -163,6 +168,13 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- In-memory SMTP server for the F17 email tests. -->
+    <dependency>
+      <groupId>com.icegreen</groupId>
+      <artifactId>greenmail-junit5</artifactId>
+      <version>2.1.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
