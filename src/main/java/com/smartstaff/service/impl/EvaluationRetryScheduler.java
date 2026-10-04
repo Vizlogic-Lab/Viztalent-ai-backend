@@ -1,6 +1,7 @@
 package com.smartstaff.service.impl;
 
 import com.smartstaff.repository.AssessmentAttemptRepository;
+import com.smartstaff.repository.InterviewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,14 +25,19 @@ public class EvaluationRetryScheduler {
 
     private final AssessmentAttemptRepository attempts;
     private final EvaluationJob job;
+    private final InterviewRepository interviews;
+    private final InterviewEvaluationJob interviewJob;
     private final boolean enabled;
     private final Duration stuckAfter;
 
     public EvaluationRetryScheduler(AssessmentAttemptRepository attempts, EvaluationJob job,
+                                    InterviewRepository interviews, InterviewEvaluationJob interviewJob,
                                     @Value("${app.evaluation.retry-enabled:true}") boolean enabled,
                                     @Value("${app.evaluation.stuck-after-minutes:5}") long stuckAfterMinutes) {
         this.attempts = attempts;
         this.job = job;
+        this.interviews = interviews;
+        this.interviewJob = interviewJob;
         this.enabled = enabled;
         this.stuckAfter = Duration.ofMinutes(stuckAfterMinutes);
     }
@@ -60,6 +66,13 @@ public class EvaluationRetryScheduler {
         }
         for (UUID id : attempts.findStaleEvaluations(now.minus(Duration.ofMinutes(15)))) {
             if (job.evaluateNow(id, EvaluationJob.Mode.FULL)) n++;
+        }
+        // F16 interviews: completed in the last day but never graded, and due rubric retries.
+        for (UUID id : interviews.findUngradedCompleted(now.minus(stuckAfter), now.minus(Duration.ofDays(1)))) {
+            if (interviewJob.evaluateNow(id, InterviewEvaluationJob.Mode.FIRST)) n++;
+        }
+        for (UUID id : interviews.findDueEvaluationRetries(now)) {
+            if (interviewJob.evaluateNow(id, InterviewEvaluationJob.Mode.RETRY_PENDING)) n++;
         }
         return n;
     }

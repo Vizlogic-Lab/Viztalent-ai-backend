@@ -35,6 +35,12 @@ public class ReviewService {
 
     public record QuestionSetDecision(String action, String comment) {}
 
+    /** F16: an SME score for one interview turn (0..max_score) and why. */
+    public record TurnAdjustment(String turn_id, BigDecimal sme_score, String reason) {}
+
+    public record InterviewDecision(List<TurnAdjustment> adjustments, String theory_band, String hands_on_band,
+                                    String recommendation, String comment, String action) {}
+
     public record Reopen(String reason) {}
 
     static final Set<String> BANDS = Set.of("STRONG", "WORKING", "BASIC", "NOT_DEMONSTRATED");
@@ -55,6 +61,8 @@ public class ReviewService {
     private final JobRoleProfileRepository roleProfiles;
     private final AssessmentQuestionService questionService;
     private final AssessmentMapper mapper;
+    private final InterviewRepository interviews;
+    private final InterviewTurnRepository interviewTurns;
     private final TransactionTemplate tx;
 
     public ReviewService(SmeReviewRepository reviews, ReviewAuditRepository audit, JobReviewerRepository jobReviewers,
@@ -63,7 +71,9 @@ public class ReviewService {
                          AssessmentAnswerRepository answers, AttemptEventRepository events,
                          JobRoleProfileRepository roleProfiles, AssessmentQuestionService questionService,
                          AssessmentMapper mapper, PlatformTransactionManager transactionManager,
-            ActivityRecorder activity) {
+            ActivityRecorder activity, InterviewRepository interviews, InterviewTurnRepository interviewTurns) {
+        this.interviews = interviews;
+        this.interviewTurns = interviewTurns;
         this.activity = activity;
         this.reviews = reviews;
         this.audit = audit;
@@ -127,6 +137,46 @@ public class ReviewService {
             if (r.getSubjectType() == SmeReview.Subject.QUESTION_SET) {
                 out.put("questions", questions.findByAssessmentIdOrderByLevelAscSeqAsc(r.getSubjectId()).stream()
                         .map(mapper::toQuestionResponse).toList());
+            }
+            if (r.getSubjectType() == SmeReview.Subject.INTERVIEW) {
+                // Reviewers can't reach the interview endpoints, so the review carries the graded transcript.
+                interviews.findById(r.getSubjectId()).ifPresent(iv -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("interview_id", iv.getId().toString());
+                    m.put("candidate_name", iv.getCandidateName());
+                    m.put("role_title", iv.getRoleTitle());
+                    m.put("mode", iv.getMode());
+                    m.put("ended_at", iv.getEndedAt());
+                    m.put("evaluation_status", iv.getEvaluationStatus());
+                    m.put("theory_score", iv.getTheoryScore());
+                    m.put("hands_on_score", iv.getHandsOnScore());
+                    m.put("overall_score", iv.getOverallScore());
+                    m.put("theory_band", iv.getTheoryBand());
+                    m.put("hands_on_band", iv.getHandsOnBand());
+                    m.put("recommendation", iv.getRecommendation());
+                    m.put("engine_recommendation", iv.getEngineRecommendation());
+                    m.put("flags", iv.getFlags());
+                    out.put("interview", m);
+                    out.put("turns", interviewTurns.findByInterviewIdOrderBySeqAsc(iv.getId()).stream().map(t -> {
+                        Map<String, Object> x = new LinkedHashMap<>();
+                        x.put("turn_id", t.getId().toString());
+                        x.put("seq", t.getSeq());
+                        x.put("source", t.getSource());
+                        x.put("dimension", t.getDimension().name());
+                        x.put("category", t.getCategory());
+                        x.put("question", t.getQuestion());
+                        x.put("answer", t.getAnswer());
+                        x.put("expected_points", t.getExpectedPoints());
+                        x.put("score", t.getScore());
+                        x.put("max_score", t.getMaxScore());
+                        x.put("sme_score", t.getSmeScore());
+                        x.put("sme_reason", t.getSmeReason());
+                        x.put("evidence", t.getEvidence());
+                        x.put("flags", t.getFlags());
+                        x.put("speech_confidence", t.getSpeechConfidence());
+                        return x;
+                    }).toList());
+                });
             }
             out.put("audit", audit.findByReviewIdOrderByIdAsc(r.getId()).stream().map(x -> {
                 Map<String, Object> m = new LinkedHashMap<>();
@@ -304,6 +354,89 @@ public class ReviewService {
         });
     }
 
+    // ── F16: interview results ──────────────────────────────────────────
+
+    public Map<String, Object> decideInterview(UUID reviewId, InterviewDecision req, User actor) {
+        return tx.execute(s -> {
+            SmeReview r = lock(reviewId);
+            requireSubject(r, SmeReview.Subject.INTERVIEW);
+            requireOpen(r);
+            requireMine(r, actor);
+            if (req == null || req.action() == null) throw new ApiException(HttpStatus.BAD_REQUEST, "action is required.");
+            Interview iv = interviews.lockById(r.getSubjectId())
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Interview not found."));
+            if (!"AWAITING_REVIEW".equals(iv.getEvaluationStatus())) {
+                throw new ApiException(HttpStatus.CONFLICT, "This interview isn't waiting for review.", "not_awaiting_review");
+            }
+            Map<String, Object> before = state(r, iv);
+            String action = req.action().trim().toUpperCase(Locale.ROOT);
+            if (r.getReviewerId() == null) r.setReviewerId(actor.getId());
+            r.setComment(req.comment());
+            r.setSignedOffAt(Instant.now());
+
+            if (action.equals("RETURN_TO_HR")) {
+                if (blank(req.comment())) throw new ApiException(HttpStatus.BAD_REQUEST, "Say why it goes back to HR.");
+                r.setStatus(SmeReview.Status.RETURNED);
+                iv.setEvaluationStatus("EVALUATED");   // provisional again, HR decides
+                interviews.save(iv);
+                reviews.save(r);
+                log(r, actor, "RETURNED_TO_HR", before, state(r, iv));
+                return row(r);
+            }
+            if (!action.equals("SIGN_OFF")) throw new ApiException(HttpStatus.BAD_REQUEST, "action must be SIGN_OFF or RETURN_TO_HR.");
+
+            Map<UUID, InterviewTurn> byId = new LinkedHashMap<>();
+            interviewTurns.findByInterviewIdOrderBySeqAsc(iv.getId()).forEach(t -> byId.put(t.getId(), t));
+            List<Map<String, Object>> applied = new ArrayList<>();
+            Set<UUID> adjusted = new HashSet<>();
+            for (TurnAdjustment adj : req.adjustments() == null ? List.<TurnAdjustment>of() : req.adjustments()) {
+                UUID tid = uuid(adj.turn_id(), "turn_id");
+                InterviewTurn t = byId.get(tid);
+                if (t == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Turn " + tid + " isn't part of this interview.");
+                if (!adjusted.add(tid)) throw new ApiException(HttpStatus.BAD_REQUEST, "Turn " + tid + " is adjusted twice.");
+                double max = t.getMaxScore() == null ? 0 : t.getMaxScore().doubleValue();
+                if (max <= 0) throw new ApiException(HttpStatus.BAD_REQUEST, "Turn " + tid + " has no expected points to score.");
+                if (adj.sme_score() == null || adj.sme_score().signum() < 0 || adj.sme_score().doubleValue() > max) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "sme_score for " + tid + " must be between 0 and " + max + ".");
+                }
+                if (blank(adj.reason())) throw new ApiException(HttpStatus.BAD_REQUEST, "Every adjustment needs a reason.");
+                BigDecimal sme = adj.sme_score().setScale(2, RoundingMode.HALF_UP);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("turn_id", tid.toString());
+                m.put("auto_score", t.getScore());
+                m.put("sme_score", sme);
+                m.put("reason", adj.reason().trim());
+                applied.add(m);
+                t.setSmeScore(sme);
+                t.setSmeReason(adj.reason().trim());
+                interviewTurns.save(t);
+            }
+            InterviewEvaluationJob.result(iv, byId.values(), adjusted);
+
+            boolean overridden = false;
+            if (!blank(req.theory_band())) overridden |= !override(req.theory_band(), BANDS, "theory_band").equals(iv.getTheoryBand());
+            if (!blank(req.hands_on_band())) overridden |= !override(req.hands_on_band(), BANDS, "hands_on_band").equals(iv.getHandsOnBand());
+            if (!blank(req.recommendation())) overridden |= !override(req.recommendation(), RECOMMENDATIONS, "recommendation").equals(iv.getRecommendation());
+            if (!blank(req.theory_band())) iv.setTheoryBand(req.theory_band().trim().toUpperCase(Locale.ROOT));
+            if (!blank(req.hands_on_band())) iv.setHandsOnBand(req.hands_on_band().trim().toUpperCase(Locale.ROOT));
+            if (!blank(req.recommendation())) iv.setRecommendation(req.recommendation().trim().toUpperCase(Locale.ROOT));
+
+            r.setAdjustments(applied);
+            r.setFinalTheoryBand(iv.getTheoryBand());
+            r.setFinalHandsOnBand(iv.getHandsOnBand());
+            r.setFinalRecommendation(iv.getRecommendation());
+            r.setStatus(applied.isEmpty() && !overridden ? SmeReview.Status.APPROVED : SmeReview.Status.ADJUSTED);
+            iv.setEvaluationStatus("VALIDATED");
+            iv.setValidationReason(null);
+            interviews.save(iv);
+            reviews.save(r);
+            log(r, actor, "SIGNED_OFF", before, state(r, iv));
+            activity.record(r.getJobId(), ActivityRecorder.VALIDATION, "Interview with " + iv.getCandidateName()
+                    + " validated by " + actor.getName() + ": " + iv.getRecommendation(), iv.getId());
+            return row(r);
+        });
+    }
+
     /** Validates SME criterion scores against the engine's graded criteria (id → max); null when none given. */
     private static Map<String, BigDecimal> criteria(UUID qid, AssessmentAnswer ans, List<CriterionScore> given) {
         if (given == null || given.isEmpty()) return null;
@@ -375,7 +508,9 @@ public class ReviewService {
             if (!r.getStatus().isClosed()) throw new ApiException(HttpStatus.CONFLICT, "This review is still open.", "review_open");
             AssessmentAttempt a = r.getSubjectType() == SmeReview.Subject.ATTEMPT
                     ? attempts.lockById(r.getSubjectId()).orElse(null) : null;
-            Map<String, Object> before = a == null ? state(r) : state(r, a);
+            Interview iv = r.getSubjectType() == SmeReview.Subject.INTERVIEW
+                    ? interviews.lockById(r.getSubjectId()).orElse(null) : null;
+            Map<String, Object> before = a != null ? state(r, a) : iv != null ? state(r, iv) : state(r);
             r.setStatus(r.getReviewerId() == null ? SmeReview.Status.PENDING : SmeReview.Status.IN_REVIEW);
             r.setSignedOffAt(null);
             reviews.save(r);
@@ -383,7 +518,11 @@ public class ReviewService {
                 a.setStatus(AttemptStatus.AWAITING_REVIEW);
                 attempts.save(a);
             }
-            Map<String, Object> after = new LinkedHashMap<>(a == null ? state(r) : state(r, a));
+            if (iv != null) {
+                iv.setEvaluationStatus("AWAITING_REVIEW");
+                interviews.save(iv);
+            }
+            Map<String, Object> after = new LinkedHashMap<>(a != null ? state(r, a) : iv != null ? state(r, iv) : state(r));
             after.put("reason", req.reason().trim());
             log(r, actor, "REOPENED", before, after);
             return row(r);
@@ -413,6 +552,13 @@ public class ReviewService {
                 m.put("recommendation", a.getRecommendation());
                 m.put("attempt_status", a.getStatus().name());
             });
+        } else if (r.getSubjectType() == SmeReview.Subject.INTERVIEW) {
+            interviews.findById(r.getSubjectId()).ifPresent(iv -> {
+                m.put("candidate_name", iv.getCandidateName());
+                m.put("mode", iv.getMode());
+                m.put("recommendation", iv.getRecommendation());
+                m.put("interview_status", iv.getEvaluationStatus());
+            });
         } else {
             assessments.findById(r.getSubjectId()).ifPresent(x -> m.put("version", x.getVersion()));
         }
@@ -435,6 +581,19 @@ public class ReviewService {
         m.put("theory_band", a.getTheoryBand());
         m.put("hands_on_band", a.getHandsOnBand());
         m.put("recommendation", a.getRecommendation());
+        if (!r.getAdjustments().isEmpty()) m.put("adjustments", r.getAdjustments());
+        return m;
+    }
+
+    private static Map<String, Object> state(SmeReview r, Interview iv) {
+        Map<String, Object> m = state(r);
+        m.put("interview_status", iv.getEvaluationStatus());
+        m.put("theory_score", iv.getTheoryScore());
+        m.put("hands_on_score", iv.getHandsOnScore());
+        m.put("overall_score", iv.getOverallScore());
+        m.put("theory_band", iv.getTheoryBand());
+        m.put("hands_on_band", iv.getHandsOnBand());
+        m.put("recommendation", iv.getRecommendation());
         if (!r.getAdjustments().isEmpty()) m.put("adjustments", r.getAdjustments());
         return m;
     }

@@ -95,7 +95,26 @@ public class RubricGrader {
         return out;
     }
 
+    /** F16 interview answers: one criterion per expected point (EP1..n), 0 / 1 / 2 each. */
+    public static List<Criterion> expectedPointCriteria(List<String> expectedPoints) {
+        List<Criterion> out = new ArrayList<>();
+        for (int i = 0; i < expectedPoints.size(); i++) out.add(new Criterion("EP" + (i + 1), expectedPoints.get(i), 2.0));
+        return out;
+    }
+
     // ── prompts ─────────────────────────────────────────────────────────
+
+    public static String interviewPrompt(String question, List<Criterion> criteria, String answer) {
+        StringBuilder p = new StringBuilder();
+        p.append("You are grading a candidate's spoken answer from a first-round interview. The answer is a ")
+                .append("speech-to-text transcript: ignore filler words and transcription slips, judge meaning, not ")
+                .append("wording. Score every expected point 0 (not covered), 1 (partly covered) or 2 (fully covered).\n\n")
+                .append("Question:\n").append(question).append("\n\n");
+        appendCriteria(p, criteria);
+        p.append("\nCandidate's answer:\n").append(ANSWER_START).append('\n').append(answer).append('\n')
+                .append(ANSWER_END).append('\n');
+        return p.toString();
+    }
 
     public static String codePrompt(String statement, String language, String referenceSolution, String expectedComplexity,
                                     String testSummary, List<Criterion> criteria, String code) {
@@ -135,6 +154,36 @@ public class RubricGrader {
     }
 
     // ── grading ─────────────────────────────────────────────────────────
+
+    /** fraction = the awarded share of the rubric; runs = every grading run. */
+    public record Outcome(boolean unavailable, double fraction, Run chosen, List<Map<String, Object>> runs, boolean disagreement) {}
+
+    /** The F9 consistency rule: grade twice; if the two totals (on a rubric worth
+     *  rubricPoints) differ by more than threshold × questionPoints, grade a third
+     *  time and take the median run (disagreement = true). Otherwise the mean. */
+    public Outcome gradeConsistently(String apiKey, String prompt, List<Criterion> criteria, String answer,
+                                     double rubricPoints, double questionPoints, double threshold) {
+        try {
+            Run r1 = grade(apiKey, prompt, criteria, answer);
+            Run r2 = grade(apiKey, prompt, criteria, answer);
+            List<Run> all = new ArrayList<>(List.of(r1, r2));
+            double t1 = r1.fraction() * rubricPoints, t2 = r2.fraction() * rubricPoints;
+            if (!EvaluationRules.disagrees(t1, t2, questionPoints, threshold)) {
+                return new Outcome(false, (r1.fraction() + r2.fraction()) / 2, r1, maps(all), false);
+            }
+            Run r3 = grade(apiKey, prompt, criteria, answer);
+            all.add(r3);
+            double med = EvaluationRules.median(t1, t2, r3.fraction() * rubricPoints);
+            Run chosen = all.stream().filter(r -> Math.abs(r.fraction() * rubricPoints - med) < 1e-9).findFirst().orElse(r3);
+            return new Outcome(false, chosen.fraction(), chosen, maps(all), true);
+        } catch (Unavailable e) {
+            return new Outcome(true, 0, null, List.of(), false);
+        }
+    }
+
+    private static List<Map<String, Object>> maps(List<Run> runs) {
+        return runs.stream().map(Run::toMap).toList();
+    }
 
     public Run grade(String apiKey, String prompt, List<Criterion> criteria, String candidateAnswer) throws Unavailable {
         if (apiKey == null || apiKey.isBlank()) throw new Unavailable("No Gemini API key is configured.", null);

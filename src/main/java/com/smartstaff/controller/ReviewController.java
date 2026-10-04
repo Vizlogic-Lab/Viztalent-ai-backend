@@ -85,6 +85,14 @@ public class ReviewController {
         return ResponseEntity.ok(reviews.decideAttempt(reviewId, req, actor));
     }
 
+    @PostMapping("/api/review/interviews/{reviewId}")
+    @PreAuthorize("@jobAccess.canReviewReview(#reviewId, authentication)")
+    public ResponseEntity<Map<String, Object>> decideInterview(@PathVariable UUID reviewId,
+                                                               @RequestBody ReviewService.InterviewDecision req,
+                                                               @AuthenticationPrincipal User actor) {
+        return ResponseEntity.ok(reviews.decideInterview(reviewId, req, actor));
+    }
+
     @PostMapping("/api/review/question_sets/{reviewId}")
     @PreAuthorize("@jobAccess.canReviewReview(#reviewId, authentication)")
     public ResponseEntity<Map<String, Object>> decideQuestionSet(@PathVariable UUID reviewId,

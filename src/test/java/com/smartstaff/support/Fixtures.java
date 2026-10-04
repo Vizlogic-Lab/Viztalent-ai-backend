@@ -58,18 +58,23 @@ public final class Fixtures {
         return arr.toString();
     }
 
-    /** The JSON *text* Gemini is asked to return for interview prep. */
+    /** The JSON *text* Gemini is asked to return for interview prep (F16 shape): the
+     *  last min(2, n − 1) of the n questions are practical prompts; all have expected points. */
     public static String interviewJson(int questionCount) {
         ObjectNode obj = JSON.createObjectNode();
         obj.put("intro", "Hello, and welcome to your short AI interview.");
         obj.put("outro", "Thank you — our team will be in touch.");
+        int practical = Math.min(2, Math.max(0, questionCount - 1));
         ArrayNode qs = obj.putArray("questions");
+        ArrayNode ps = obj.putArray("practical_questions");
         for (int i = 1; i <= questionCount; i++) {
-            ObjectNode q = qs.addObject();
-            q.put("category", i == 1 ? "Background" : "Technical");
+            ObjectNode q = (i > questionCount - practical ? ps : qs).addObject();
+            q.put("category", i == 1 ? "Background" : i > questionCount - practical ? "Practical" : "Technical");
             if (i == 1) q.putNull("skill"); else q.put("skill", "java");
             q.put("question", "Interview question number " + i + "?");
+            q.putArray("expected_points").add("point " + i + "a").add("point " + i + "b");
         }
+        obj.putArray("recruiter_expected_points");
         return obj.toString();
     }
 

@@ -365,7 +365,7 @@ public class EvaluationJob {
         String testSummary = "passed " + hiddenPassed + " of " + hiddenTotal + " hidden tests";
         String prompt = RubricGrader.codePrompt(it.prompt(), lang, it.reference().get(lang), it.expectedComplexity(),
                 testSummary, RubricGrader.codeCriteria(it.rubric()), it.code());
-        RubricOutcome ro = rubric(apiKey, prompt, RubricGrader.codeCriteria(it.rubric()), it.code(), rubricPoints, it.points());
+        RubricGrader.Outcome ro = rubric(apiKey, prompt, RubricGrader.codeCriteria(it.rubric()), it.code(), rubricPoints, it.points());
         if (ro.unavailable()) {
             return pending(it, "RUBRIC_PENDING", "AI grader unavailable — the 30% quality rubric is pending.", auto, submit,
                     List.of(testEvidence));
@@ -383,7 +383,7 @@ public class EvaluationJob {
         if (it.keyPoints().isEmpty()) return zero(it, "No key points to grade against.", List.of(), null, null);
         List<RubricGrader.Criterion> criteria = RubricGrader.keyPointCriteria(it.keyPoints());
         String prompt = RubricGrader.scenarioPrompt(it.prompt(), it.modelAnswer(), criteria, it.text());
-        RubricOutcome ro = rubric(apiKey, prompt, criteria, it.text(), it.points(), it.points());
+        RubricGrader.Outcome ro = rubric(apiKey, prompt, criteria, it.text(), it.points(), it.points());
         if (ro.unavailable()) {
             return pending(it, "RUBRIC_PENDING", "AI grader unavailable — this written answer is pending.", BigDecimal.ZERO,
                     null, List.of());
@@ -397,32 +397,9 @@ public class EvaluationJob {
 
     // ── rubric runs: twice, third + median on disagreement ──────────────
 
-    private record RubricOutcome(boolean unavailable, double fraction, RubricGrader.Run chosen,
-                                 List<Map<String, Object>> runs, boolean disagreement) {}
-
-    private RubricOutcome rubric(String apiKey, String prompt, List<RubricGrader.Criterion> criteria, String answer,
-                                 double rubricPoints, int questionPoints) {
-        try {
-            RubricGrader.Run r1 = grader.grade(apiKey, prompt, criteria, answer);
-            RubricGrader.Run r2 = grader.grade(apiKey, prompt, criteria, answer);
-            List<RubricGrader.Run> all = new ArrayList<>(List.of(r1, r2));
-            double t1 = r1.fraction() * rubricPoints, t2 = r2.fraction() * rubricPoints;
-            if (!EvaluationRules.disagrees(t1, t2, questionPoints, disagreementThreshold)) {
-                return new RubricOutcome(false, (r1.fraction() + r2.fraction()) / 2, r1, maps(all), false);
-            }
-            RubricGrader.Run r3 = grader.grade(apiKey, prompt, criteria, answer);
-            all.add(r3);
-            double med = EvaluationRules.median(t1, t2, r3.fraction() * rubricPoints);
-            RubricGrader.Run chosen = all.stream()
-                    .filter(r -> Math.abs(r.fraction() * rubricPoints - med) < 1e-9).findFirst().orElse(r3);
-            return new RubricOutcome(false, chosen.fraction(), chosen, maps(all), true);
-        } catch (RubricGrader.Unavailable e) {
-            return new RubricOutcome(true, 0, null, List.of(), false);
-        }
-    }
-
-    private static List<Map<String, Object>> maps(List<RubricGrader.Run> runs) {
-        return runs.stream().map(RubricGrader.Run::toMap).toList();
+    private RubricGrader.Outcome rubric(String apiKey, String prompt, List<RubricGrader.Criterion> criteria, String answer,
+                                        double rubricPoints, int questionPoints) {
+        return grader.gradeConsistently(apiKey, prompt, criteria, answer, rubricPoints, questionPoints, disagreementThreshold);
     }
 
     private Graded zero(Item it, String why, List<String> flags, SubmitRun submit, Map<String, Object> extra) {

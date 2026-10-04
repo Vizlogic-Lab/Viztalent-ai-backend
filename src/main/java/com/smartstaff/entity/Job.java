@@ -65,6 +65,10 @@ public class Job {
     @Column(name = "review_policy", columnDefinition = "jsonb")
     private ReviewPolicy reviewPolicy;
 
+    /** F16: questions per L1 interview, recruiter + AI (null = 5, max 10). */
+    @Column(name = "interview_question_total")
+    private Integer interviewQuestionTotal;
+
     @Column(name = "experience_min_years")
     private Integer experienceMinYears;
 

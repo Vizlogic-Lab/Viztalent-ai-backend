@@ -37,4 +37,7 @@ public interface InterviewService {
     SimpleResponse saveByToken(String token, InterviewSaveByTokenRequest req);
 
     InterviewTranscriptsResponse transcripts(UUID jobId);
+
+    /** F16: HR re-grade of a completed interview (async); refused once validated. */
+    java.util.Map<String, Object> regrade(UUID interviewId);
 }

@@ -12,16 +12,20 @@ import com.smartstaff.entity.InterviewTurn;
 import com.smartstaff.exception.ApiException;
 import com.smartstaff.repository.InterviewRepository;
 import com.smartstaff.repository.InterviewTurnRepository;
+import com.smartstaff.service.InterviewCompletedEvent;
 import com.smartstaff.service.PhoneInterviewService;
 import com.smartstaff.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -64,17 +68,20 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final TwilioClient twilioClient;
+    private final ApplicationEventPublisher events;
 
     public PhoneInterviewServiceImpl(InterviewRepository interviewRepository,
                                       InterviewTurnRepository interviewTurnRepository,
                                       SettingsService settingsService,
                                       ObjectMapper objectMapper,
-                                      TwilioClient twilioClient) {
+                                      TwilioClient twilioClient,
+                                      ApplicationEventPublisher events) {
         this.interviewRepository = interviewRepository;
         this.interviewTurnRepository = interviewTurnRepository;
         this.settingsService = settingsService;
         this.objectMapper = objectMapper;
         this.twilioClient = twilioClient;
+        this.events = events;
     }
 
     @Override
@@ -158,7 +165,7 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
         String status = interview.getTwilioCallStatus() != null ? interview.getTwilioCallStatus() : "queued";
         int answered = (int) turns.stream().filter(t -> t.getAnswer() != null && !t.getAnswer().isBlank()).count();
         List<TranscriptTurnResponse> transcript = turns.stream()
-                .map(t -> new TranscriptTurnResponse(t.getCategory(), t.getSkill(), t.getQuestion(), t.getAnswer()))
+                .map(TranscriptTurnResponse::of)
                 .toList();
 
         return new CallStatusResponse(status, transcript, answered, turns.size(), TERMINAL_STATUSES.contains(status));
@@ -199,8 +206,10 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
             return sayAndHangup(interview.getLanguage(), interview.getOutro());
         }
 
+        // With actionOnEmptyResult, silence also lands here (no SpeechResult): an empty answer, then the next question.
         InterviewTurn current = turns.get(seq);
         current.setAnswer(params.getOrDefault("SpeechResult", ""));
+        current.setSpeechConfidence(confidence(params.get("Confidence")));
         interviewTurnRepository.save(current);
 
         int next = seq + 1;
@@ -211,7 +220,20 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
         interview.setStatus("COMPLETED");
         interview.setEndedAt(Instant.now());
         interviewRepository.save(interview);
+        events.publishEvent(new InterviewCompletedEvent(interviewId));
         return sayAndHangup(interview.getLanguage(), interview.getOutro());
+    }
+
+    /** Twilio's Confidence (0..1) for the speech result; null when absent or unreadable. */
+    static BigDecimal confidence(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            double v = Double.parseDouble(raw.trim());
+            if (Double.isNaN(v)) return null;
+            return BigDecimal.valueOf(Math.max(0, Math.min(1, v))).setScale(4, RoundingMode.HALF_UP);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @Override
@@ -232,6 +254,7 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
                 // happened — but never downgrade an interview that already completed.
                 if ("completed".equals(callStatus)) {
                     interview.setStatus("COMPLETED");
+                    events.publishEvent(new InterviewCompletedEvent(interview.getId()));   // grading ignores a repeat
                 } else if (!"COMPLETED".equals(interview.getStatus())) {
                     interview.setStatus("FAILED");
                 }
@@ -244,7 +267,9 @@ public class PhoneInterviewServiceImpl implements PhoneInterviewService {
 
     private String gatherQuestion(UUID interviewId, String language, InterviewTurn turn, int seq) {
         String action = settingsService.getPublicBaseUrl() + "/api/interview/twiml/answer/" + interviewId + "/" + seq;
-        return "<Gather input=\"speech\" timeout=\"" + GATHER_TIMEOUT_SECONDS + "\" speechTimeout=\"auto\""
+        // actionOnEmptyResult: on silence Twilio still calls the action (so the call moves on) instead
+        // of falling through to the end of the TwiML and hanging up.
+        return "<Gather input=\"speech\" actionOnEmptyResult=\"true\" timeout=\"" + GATHER_TIMEOUT_SECONDS + "\" speechTimeout=\"auto\""
                 + " language=\"" + escapeXml(language) + "\" action=\"" + escapeXml(action) + "\" method=\"POST\">"
                 + say(language, turn.getQuestion())
                 + "</Gather>";

@@ -65,6 +65,12 @@ public class InterviewController {
         return ResponseEntity.ok(phoneInterviewService.placeCall(req));
     }
 
+    @PostMapping("/{interviewId}/evaluate")
+    @PreAuthorize("@jobAccess.canAccessInterview(#interviewId, authentication)")
+    public ResponseEntity<java.util.Map<String, Object>> regrade(@PathVariable UUID interviewId) {
+        return ResponseEntity.ok(interviewService.regrade(interviewId));
+    }
+
     @GetMapping("/call_status/{interviewId}")
     @PreAuthorize("@jobAccess.canAccessInterview(#interviewId, authentication)")
     public ResponseEntity<CallStatusResponse> callStatus(@PathVariable UUID interviewId) {

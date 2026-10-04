@@ -9,9 +9,11 @@ import com.smartstaff.util.ReviewRules;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /** F12 hooks the generation, invite and evaluation code calls (inside their own
  *  transactions): open a question-set review, refuse invites until it is
@@ -58,32 +60,58 @@ public class ReviewRouter {
     /** Called when an attempt has just become EVALUATED (result computed). Jobs
      *  without an assigned reviewer keep the provisional result as before. */
     public void routeResult(AssessmentAttempt a) {
-        Job job = a.getJob();
-        if (!jobReviewers.existsByJobId(job.getId())) return;
-        SmeReview open = reviews.findBySubjectTypeAndSubjectId(SmeReview.Subject.ATTEMPT, a.getId()).orElse(null);
-        if (open != null && !open.getStatus().isClosed()) {
-            a.setStatus(AttemptStatus.AWAITING_REVIEW);   // re-score while waiting: keep the same review
-            return;
+        switch (route(a.getJob(), SmeReview.Subject.ATTEMPT, a.getId(), a.getRecommendation(), a.getTheoryScore())) {
+            case NONE -> { }
+            case REVIEW -> {
+                a.setStatus(AttemptStatus.AWAITING_REVIEW);
+                a.setValidationReason(null);
+            }
+            case SAMPLED -> {
+                a.setStatus(AttemptStatus.VALIDATED);
+                a.setValidationReason("sampling");
+                activity.record(a.getJob().getId(), ActivityRecorder.VALIDATION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
+                        + " result validated without SME review (sampling): " + a.getRecommendation(), a.getId());
+            }
         }
-        if (ReviewRules.needsReview(a.getRecommendation(), a.getTheoryScore(), a.getId(), job.getReviewPolicy())) {
-            a.setStatus(AttemptStatus.AWAITING_REVIEW);
-            a.setValidationReason(null);
-            SmeReview r = open != null ? open : new SmeReview(SmeReview.Subject.ATTEMPT, a.getId(), job.getId(), null);
-            Map<String, Object> before = open == null ? null : Map.of("status", open.getStatus().name());
-            r.setStatus(SmeReview.Status.PENDING);
-            r.setReviewerId(null);
-            r.setSignedOffAt(null);
-            r.setDueAt(ReviewRules.addWorkingDays(Instant.now(), REVIEW_WORKING_DAYS));
-            r = reviews.save(r);
-            Map<String, Object> after = new LinkedHashMap<>();
-            after.put("recommendation", a.getRecommendation());
-            after.put("theory_score", a.getTheoryScore());
-            audit.save(new ReviewAudit(r.getId(), null, "CREATED", before, after));
-        } else {
-            a.setStatus(AttemptStatus.VALIDATED);
-            a.setValidationReason("sampling");
-            activity.record(job.getId(), ActivityRecorder.VALIDATION, ActivityRecorder.who(a.getCandidateName(), a.getCandidateEmail())
-                    + " result validated without SME review (sampling): " + a.getRecommendation(), a.getId());
+    }
+
+    /** F16: the same routing for a freshly graded L1 interview. */
+    public void routeInterview(Interview iv) {
+        switch (route(iv.getJob(), SmeReview.Subject.INTERVIEW, iv.getId(), iv.getRecommendation(), iv.getTheoryScore())) {
+            case NONE -> { }
+            case REVIEW -> {
+                iv.setEvaluationStatus("AWAITING_REVIEW");
+                iv.setValidationReason(null);
+            }
+            case SAMPLED -> {
+                iv.setEvaluationStatus("VALIDATED");
+                iv.setValidationReason("sampling");
+                activity.record(iv.getJob().getId(), ActivityRecorder.VALIDATION, "Interview with " + iv.getCandidateName()
+                        + " validated without SME review (sampling): " + iv.getRecommendation(), iv.getId());
+            }
         }
+    }
+
+    private enum Route { NONE, REVIEW, SAMPLED }
+
+    /** NONE: no reviewer on the job. REVIEW: an open review exists (a re-grade keeps it) or one was
+     *  just opened by policy. SAMPLED: validated without a reviewer. */
+    private Route route(Job job, SmeReview.Subject subject, UUID subjectId, String recommendation, BigDecimal theory) {
+        if (!jobReviewers.existsByJobId(job.getId())) return Route.NONE;
+        SmeReview open = reviews.findBySubjectTypeAndSubjectId(subject, subjectId).orElse(null);
+        if (open != null && !open.getStatus().isClosed()) return Route.REVIEW;
+        if (!ReviewRules.needsReview(recommendation, theory, subjectId, job.getReviewPolicy())) return Route.SAMPLED;
+        SmeReview r = open != null ? open : new SmeReview(subject, subjectId, job.getId(), null);
+        Map<String, Object> before = open == null ? null : Map.of("status", open.getStatus().name());
+        r.setStatus(SmeReview.Status.PENDING);
+        r.setReviewerId(null);
+        r.setSignedOffAt(null);
+        r.setDueAt(ReviewRules.addWorkingDays(Instant.now(), REVIEW_WORKING_DAYS));
+        r = reviews.save(r);
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("recommendation", recommendation);
+        after.put("theory_score", theory);
+        audit.save(new ReviewAudit(r.getId(), null, "CREATED", before, after));
+        return Route.REVIEW;
     }
 }

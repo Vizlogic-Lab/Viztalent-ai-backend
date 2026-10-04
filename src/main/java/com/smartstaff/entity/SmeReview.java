@@ -21,7 +21,7 @@ import java.util.UUID;
 @NoArgsConstructor
 public class SmeReview {
 
-    public enum Subject { QUESTION_SET, ATTEMPT }
+    public enum Subject { QUESTION_SET, ATTEMPT, INTERVIEW }
 
     public enum Status {
         PENDING, IN_REVIEW, APPROVED, ADJUSTED, RETURNED;
