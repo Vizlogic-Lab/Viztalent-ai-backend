@@ -102,7 +102,7 @@ public class AssessmentServiceImpl implements AssessmentService {
             return new AssessmentStatusResponse(true, false, null, 0, 0, null, null, false, false, null,
                     null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
-        Optional<Assessment> latest = assessmentRepository.findTopByJobIdOrderByVersionDesc(jobId);
+        Optional<Assessment> latest = assessmentRepository.findTopByJobIdAndCandidateIdIsNullOrderByVersionDesc(jobId);
         Optional<Assessment> current = assessmentRepository.findByJobIdAndCurrentTrue(jobId);
         if (latest.isEmpty()) {
             return new AssessmentStatusResponse(true, true, job.get().getTitle(), 0, 0, null, null, false, false, null,
@@ -207,7 +207,7 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         Assessment queued = transaction.execute(status -> {
             Job locked = jobRepository.lockById(jobId).orElseThrow();
-            assessmentRepository.findTopByJobIdOrderByVersionDesc(jobId)
+            assessmentRepository.findTopByJobIdAndCandidateIdIsNullOrderByVersionDesc(jobId)
                     .filter(a -> a.getStatus().inProgress())
                     .filter(a -> a.getCreatedAt().isAfter(Instant.now().minus(STALE_GENERATION)))
                     .ifPresent(a -> {

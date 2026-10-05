@@ -48,6 +48,11 @@ public class Assessment {
     @Column(name = "is_current", nullable = false)
     private boolean current;
 
+    /** Set on a personal assessment (generated for one candidate from the JD + their
+     *  resume); null on the job-level versions. Personal ones are never current. */
+    @Column(name = "candidate_id")
+    private UUID candidateId;
+
     @Column(columnDefinition = "TEXT")
     private String error;
 

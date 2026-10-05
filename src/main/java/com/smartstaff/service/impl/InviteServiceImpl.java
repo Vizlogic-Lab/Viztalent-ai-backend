@@ -5,6 +5,7 @@ import com.smartstaff.dto.response.InviteMintResponse;
 import com.smartstaff.dto.response.InviteResponse;
 import com.smartstaff.entity.Assessment;
 import com.smartstaff.entity.AssessmentStatus;
+import com.smartstaff.entity.Candidate;
 import com.smartstaff.entity.Invite;
 import com.smartstaff.entity.Job;
 import com.smartstaff.entity.User;
@@ -51,12 +52,14 @@ public class InviteServiceImpl implements InviteService {
     private final AssessmentQuestionRepository assessmentQuestionRepository;
     private final CandidateRepository candidateRepository;
     private final ReviewRouter reviewRouter;
+    private final PersonalAssessmentGenerator personalAssessments;
 
     public InviteServiceImpl(JobRepository jobRepository, InviteRepository inviteRepository, SettingsService settingsService,
                              AssessmentRepository assessmentRepository,
                              AssessmentQuestionRepository assessmentQuestionRepository,
                              CandidateRepository candidateRepository, ReviewRouter reviewRouter,
-            ActivityRecorder activity, EmailService emailService) {
+            ActivityRecorder activity, EmailService emailService, PersonalAssessmentGenerator personalAssessments) {
+        this.personalAssessments = personalAssessments;
         this.emailService = emailService;
         this.activity = activity;
         this.reviewRouter = reviewRouter;
@@ -84,11 +87,27 @@ public class InviteServiceImpl implements InviteService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "candidate_email is required.");
         }
 
-        // Invites always point at the current READY version.
-        Assessment assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
-                .filter(a -> a.getStatus() == AssessmentStatus.READY)
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
-                        "There is no ready assessment for this job yet — generate one first.", "no_ready_assessment"));
+        // A screened candidate with a readable resume gets a personal assessment
+        // (written from the JD + resume on first invite, then reused). It has one
+        // level, so the requested levels collapse to it. Anyone else gets the job's
+        // current READY version, as before.
+        Candidate candidate = candidateRepository.findFirstByJobIdAndEmailIgnoreCase(jobId, req.candidate_email().trim())
+                .filter(c -> c.getResume() != null && c.getResume().getExtractedText() != null
+                        && !c.getResume().getExtractedText().isBlank())
+                .orElse(null);
+        Assessment assessment;
+        if (candidate != null) {
+            UUID id = personalAssessments.readyFor(candidate.getId());
+            assessment = assessmentRepository.findById(id).orElseThrow();
+            levels = List.of(PersonalAssessmentGenerator.LEVEL);
+            req = new InviteMintRequest(req.session_id(), req.candidate_email(), req.candidate_name(), levels, false,
+                    req.send_email());
+        } else {
+            assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
+                    .filter(a -> a.getStatus() == AssessmentStatus.READY)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
+                            "There is no ready assessment for this job yet — generate one first.", "no_ready_assessment"));
+        }
         reviewRouter.requireApproved(assessment);
         for (String level : levels) {
             if (assessmentQuestionRepository.countByAssessmentIdAndLevel(assessment.getId(), level) == 0) {

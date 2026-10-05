@@ -16,7 +16,12 @@ public interface AssessmentRepository extends JpaRepository<Assessment, UUID> {
 
     Optional<Assessment> findByJobIdAndVersion(UUID jobId, int version);
 
-    Optional<Assessment> findTopByJobIdOrderByVersionDesc(UUID jobId);
+    /** The job's latest job-level version (personal, per-candidate ones excluded). */
+    Optional<Assessment> findTopByJobIdAndCandidateIdIsNullOrderByVersionDesc(UUID jobId);
+
+    /** The candidate's newest personal assessment in the given status. */
+    Optional<Assessment> findFirstByCandidateIdAndStatusOrderByCreatedAtDesc(UUID candidateId,
+                                                                              com.smartstaff.entity.AssessmentStatus status);
 
     List<Assessment> findByJobIdOrderByVersionDesc(UUID jobId);
 
