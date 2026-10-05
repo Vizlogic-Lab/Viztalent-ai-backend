@@ -93,6 +93,21 @@ class PersonalAssessmentRulesTest {
     }
 
     @Test
+    void jdFallsBackToTitleSkillsAndExperience() {
+        String long_ = "x".repeat(300);
+        assertThat(PersonalAssessmentGenerator.jdFor("Dev", long_, java.util.List.of("java"), null, 1, 3)).isEqualTo(long_);
+
+        String built = PersonalAssessmentGenerator.jdFor("Java Backend Developer", null,
+                java.util.List.of("java", "spring boot"), java.util.List.of("docker"), 2, 5);
+        assertThat(built).contains("Job title: Java Backend Developer", "Required skills: java, spring boot",
+                "Nice-to-have skills: docker", "Experience: 2–5 years");
+
+        assertThat(PersonalAssessmentGenerator.jdFor("Dev", "Short JD text", java.util.List.of("java"), null, null, null))
+                .contains("Required skills: java").endsWith("Short JD text");
+        assertThat(PersonalAssessmentGenerator.jdFor("Dev", "", java.util.List.of(), null, null, null)).isNull();
+    }
+
+    @Test
     void schemaListsEverySection() {
         @SuppressWarnings("unchecked")
         var props = (java.util.Map<String, Object>) PersonalAssessmentGenerator.schema().get("properties");

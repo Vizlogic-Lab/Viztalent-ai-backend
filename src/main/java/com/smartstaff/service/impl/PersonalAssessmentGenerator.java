@@ -114,8 +114,11 @@ public class PersonalAssessmentGenerator {
     private Assessment generate(Candidate candidate) {
         Job job = candidate.getJob();
         String resume = candidate.getResume() == null ? null : candidate.getResume().getExtractedText();
-        if (blank(job.getJdText())) {
-            throw new ApiException(HttpStatus.CONFLICT, "This job has no description text to build an assessment from.", "no_jd_text");
+        String jd = jdFor(job.getTitle(), job.getJdText(), job.getMustHaveSkills(), job.getNiceToHaveSkills(),
+                job.getExperienceMinYears(), job.getExperienceMaxYears());
+        if (jd == null) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "This job has no description or skills to build an assessment from.", "no_jd_text");
         }
         if (blank(resume)) {
             throw new ApiException(HttpStatus.CONFLICT,
@@ -127,7 +130,7 @@ public class PersonalAssessmentGenerator {
         }
 
         String prompt = AssessmentPromptService.render(prompts.current(),
-                cut(job.getJdText(), MAX_JD_CHARS), cut(resume, MAX_RESUME_CHARS)) + OUTPUT_RULES;
+                cut(jd, MAX_JD_CHARS), cut(resume, MAX_RESUME_CHARS)) + OUTPUT_RULES;
 
         Parsed parsed = null;
         String problem = null;
@@ -175,6 +178,33 @@ public class PersonalAssessmentGenerator {
             throw new ApiException(HttpStatus.BAD_GATEWAY,
                     "Couldn't reach the AI service to write the assessment. Please try again.", "ai_unavailable");
         }
+    }
+
+    /** Below this, the JD text is too thin to stand alone (e.g. a pasted skill list). */
+    static final int MIN_JD_CHARS = 200;
+
+    /** The JD as the prompt sees it: the uploaded text, plus a structured summary
+     *  (title, skills, experience) when the text is missing or thin — many jobs are
+     *  created from a pasted skill list. Null when there is nothing to go on. */
+    static String jdFor(String title, String jdText, List<String> mustHave, List<String> niceToHave,
+                        Integer minYears, Integer maxYears) {
+        String text = blank(jdText) ? "" : jdText.strip();
+        boolean hasSkills = mustHave != null && !mustHave.isEmpty();
+        if (text.length() >= MIN_JD_CHARS) return text;
+        if (text.isEmpty() && !hasSkills) return null;
+        StringBuilder sb = new StringBuilder();
+        if (!blank(title)) sb.append("Job title: ").append(title.strip()).append('\n');
+        if (hasSkills) sb.append("Required skills: ").append(String.join(", ", mustHave)).append('\n');
+        if (niceToHave != null && !niceToHave.isEmpty()) {
+            sb.append("Nice-to-have skills: ").append(String.join(", ", niceToHave)).append('\n');
+        }
+        if (minYears != null || maxYears != null) {
+            sb.append("Experience: ")
+                    .append(minYears == null ? "up to " + maxYears : maxYears == null ? minYears + "+" : minYears + "–" + maxYears)
+                    .append(" years\n");
+        }
+        if (!text.isEmpty()) sb.append('\n').append(text);
+        return sb.toString().strip();
     }
 
     // ── parsing and checks ───────────────────────────────────────────────
