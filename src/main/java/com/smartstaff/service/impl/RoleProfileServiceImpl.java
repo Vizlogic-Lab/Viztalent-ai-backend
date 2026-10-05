@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
@@ -168,7 +169,7 @@ public class RoleProfileServiceImpl implements RoleProfileService {
                         "responseSchema", schema,
                         "temperature", 0));
 
-        JsonNode root = objectMapper.readTree(geminiClient.generateContent(key, body));
+        JsonNode root = objectMapper.readTree(geminiClient.generateContent(key, body, AiFeature.ROLE_PROFILE));
         String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("");
         return RoleProfileRules.fromGemini(objectMapper.readTree(text), job);
     }

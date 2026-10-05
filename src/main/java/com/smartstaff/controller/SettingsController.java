@@ -31,11 +31,6 @@ public class SettingsController {
         return ResponseEntity.ok(settingsService.saveGeminiKey(req, admin));
     }
 
-    @PostMapping("/api/config/gemini/test")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<GeminiTestResponse> testGemini() {
-        return ResponseEntity.ok(settingsService.testGeminiKey());
-    }
 
     @PostMapping("/api/config/public_url")
     @PreAuthorize("hasRole('ADMIN')")

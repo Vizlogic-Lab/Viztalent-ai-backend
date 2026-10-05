@@ -537,7 +537,7 @@ parameters, same expected signature), which was also recomputed independently wi
 | `APP_ENCRYPTION_KEY` | dev value | Encrypts the Gemini key / Twilio token at rest |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:4173` | Allowed browser origins |
 | `STORAGE_DIR` | `./storage` | Uploaded JDs and resumes |
-| `GEMINI_BASE_URL`, `GEMINI_MODEL` | Google's API, `gemini-3.5-flash` | Point at a stub in tests/demos |
+| `GEMINI_BASE_URL`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `AI_DAILY_CALL_CAP` | Google's API; no model built in; cap 2000 | Models are chosen at runtime in Settings → AI model & usage; the env vars are only starting values |
 | `TWILIO_API_BASE_URL` | `https://api.twilio.com` | Same |
 | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_AUTH_PER_MINUTE`, `RATE_LIMIT_TOKEN_PER_MINUTE`, `RATE_LIMIT_TRUST_FORWARDED_FOR` | `true`, `10`, `30`, `false` | Rate limiting |
 | `SPRING_PROFILES_ACTIVE` | *(unset)* | `prod` turns on the secrets guard |

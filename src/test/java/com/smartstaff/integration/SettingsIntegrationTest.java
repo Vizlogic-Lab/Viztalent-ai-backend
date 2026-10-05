@@ -1,5 +1,6 @@
 package com.smartstaff.integration;
 
+import com.smartstaff.support.Fixtures;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.smartstaff.support.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +50,7 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         JsonNode gemini = json.readTree(response).path("gemini");
         assertThat(gemini.path("configured").asBoolean()).isTrue();
         assertThat(gemini.path("has_key").asBoolean()).isTrue();
-        assertThat(gemini.path("model").asText()).isEqualTo("gemini-2.0-flash");
+        assertThat(gemini.path("model").asText()).isEqualTo(TEST_MODEL);
         assertThat(gemini.path("key_preview").asText()).isEqualTo("AIza…7890");
         assertThat(response).as("the full key must never be returned").doesNotContain(GEMINI_KEY);
 
@@ -71,26 +72,45 @@ class SettingsIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("the Gemini test button reports whether Google accepts the saved key")
+    @DisplayName("the AI connection test checks the chosen model exists and answers a JSON request, never returning the key")
     void geminiTest() throws Exception {
         // No key yet.
         JsonNode none = bodyOf(postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk()));
         assertThat(none.path("ok").asBoolean()).isFalse();
-        assertThat(none.path("message").asText()).contains("No Gemini API key");
+        assertThat(none.path("error_code").asText()).isEqualTo("AI_NOT_CONFIGURED");
 
         setGeminiKey(admin, GEMINI_KEY);
-
-        STUB.respond("GET", "/v1beta/models", 200, "{\"models\":[{\"name\":\"models/gemini-1.5-pro\"},{\"name\":\"models/gemini-2.5-flash\"}]}");
-        JsonNode accepted = bodyOf(postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk()));
-        assertThat(accepted.path("ok").asBoolean()).isTrue();
-        assertThat(accepted.path("model").asText()).isEqualTo("gemini-2.5-flash");
+        STUB.respond("GET", "/v1beta/models", 200, "{\"models\":["
+                + "{\"name\":\"models/test-model\",\"supportedGenerationMethods\":[\"generateContent\"]},"
+                + "{\"name\":\"models/embed-only\",\"supportedGenerationMethods\":[\"embedContent\"]}]}");
+        STUB.respond("POST", "/v1beta/models/test-model:generateContent", 200, Fixtures.geminiText("{\"ok\":true}"));
+        String raw = postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode ok = json.readTree(raw);
+        assertThat(ok.path("ok").asBoolean()).isTrue();
+        assertThat(ok.path("model").asText()).isEqualTo(TEST_MODEL);
+        assertThat(ok.path("model_ok").asBoolean()).isTrue();
+        assertThat(ok.path("latency_ms").isNumber()).isTrue();
+        assertThat(raw).doesNotContain(GEMINI_KEY);
         assertThat(STUB.requests("/v1beta/models").get(0).apiKeyHeader()).isEqualTo(GEMINI_KEY);
+
+        // The picker lists only models that can generate content.
+        JsonNode models = bodyOf(getAs(admin, "/api/config/gemini/models").andExpect(status().isOk()));
+        assertThat(models.path("models")).hasSize(1);
+        assertThat(models.path("models").path(0).path("name").asText()).isEqualTo(TEST_MODEL);
+
+        // A model the key can't use, and a rejected key.
+        putJsonAs(admin, "/api/config/ai", Map.of("model", "embed-only")).andExpect(status().isOk());
+        JsonNode missing = bodyOf(postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk()));
+        assertThat(missing.path("model_ok").asBoolean()).isFalse();
+        assertThat(missing.path("error_code").asText()).isEqualTo("AI_MODEL_UNAVAILABLE");
 
         STUB.reset();
         STUB.respond("GET", "/v1beta/models", 400, "{\"error\":{\"message\":\"API key not valid.\"}}");
         JsonNode rejected = bodyOf(postJsonAs(admin, "/api/config/gemini/test", Map.of()).andExpect(status().isOk()));
         assertThat(rejected.path("ok").asBoolean()).isFalse();
-        assertThat(rejected.path("message").asText()).contains("did not accept this key");
+        assertThat(rejected.path("error_code").asText()).isEqualTo("AI_KEY_INVALID");
+        assertThat(bodyOf(getAs(admin, "/api/config/ai")).path("last_test").path("error_code").asText()).isEqualTo("AI_KEY_INVALID");
     }
 
     // ── public URL, invite expiry ───────────────────────────────────────

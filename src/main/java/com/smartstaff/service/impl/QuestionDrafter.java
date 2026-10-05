@@ -1,12 +1,12 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.GeminiException;
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
 import com.smartstaff.entity.*;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -66,13 +66,10 @@ public class QuestionDrafter {
 
         String raw;
         try {
-            raw = geminiClient.generateContent(apiKey, body);
-        } catch (HttpClientErrorException e) {
-            boolean unusable = e.getStatusCode().value() == 401 || e.getStatusCode().value() == 403
-                    || e.getStatusCode().value() == 429;
-            throw new DraftException("Gemini rejected the request (" + e.getStatusCode().value() + ")", unusable, e);
-        } catch (RestClientException e) {
-            throw new DraftException("Gemini is unavailable", true, e);
+            raw = geminiClient.generateContent(apiKey, body, AiFeature.QUESTION_GENERATION);
+        } catch (GeminiException e) {
+            // Quota, key, model or cap problems: stop asking Gemini and fill from the bank.
+            throw new DraftException(e.getMessage(), e.unusable() || GeminiException.UNAVAILABLE.equals(e.getCode()), e);
         }
 
         try {

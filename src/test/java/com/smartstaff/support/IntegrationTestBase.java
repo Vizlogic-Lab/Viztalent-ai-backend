@@ -71,12 +71,17 @@ public abstract class IntegrationTestBase {
         }
     }
 
+    /** The model tests run against (Settings can override it per test). */
+    protected static final String TEST_MODEL = "test-model";
+
     @DynamicPropertySource
     static void dynamicProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.gemini.base-url", STUB::baseUrl);
+        registry.add("app.gemini.model", () -> TEST_MODEL);
+        registry.add("app.ai.retry-base-ms", () -> "1");
         registry.add("app.twilio.api-base-url", STUB::baseUrl);
         registry.add("app.storage.dir", STORAGE_DIR::toString);
         registry.add("app.async.inline", () -> "true");
@@ -94,6 +99,7 @@ public abstract class IntegrationTestBase {
     void resetSharedState() {
         STUB.reset();
         jdbc.update("delete from app_settings");
+        jdbc.update("delete from ai_usage_daily");
         jdbc.update("delete from question_bank_uploads"); // cascades to question_bank_items
     }
 

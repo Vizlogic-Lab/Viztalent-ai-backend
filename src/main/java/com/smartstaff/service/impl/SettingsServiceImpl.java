@@ -111,28 +111,6 @@ public class SettingsServiceImpl implements SettingsService {
     }
 
     @Override
-    public GeminiTestResponse testGeminiKey() {
-        String key = decryptedOrNull(KEY_GEMINI_API_KEY);
-        if (key == null || key.isBlank()) {
-            return new GeminiTestResponse(false, "No Gemini API key configured.", null, null);
-        }
-        try {
-            String body = geminiClient.listModels(key);
-            JsonNode root = objectMapper.readTree(body);
-            String model = geminiClient.model();
-            for (JsonNode m : root.path("models")) {
-                String name = m.path("name").asText("");
-                if (name.contains("flash")) { model = name.replaceFirst("^models/", ""); break; }
-            }
-            return new GeminiTestResponse(true, null, model, null);
-        } catch (RestClientException e) {
-            return new GeminiTestResponse(false, "Gemini did not accept this key: " + shortMessage(e), null, null);
-        } catch (Exception e) {
-            return new GeminiTestResponse(false, "Could not reach Gemini: " + shortMessage(e), null, null);
-        }
-    }
-
-    @Override
     @Transactional
     public PublicUrlSaveResponse savePublicUrl(PublicUrlRequest req, User admin) {
         String url = req.public_base_url().trim().replaceAll("/+$", "");

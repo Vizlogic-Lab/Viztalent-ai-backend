@@ -1,5 +1,7 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.GeminiException;
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
@@ -395,7 +397,11 @@ public class InterviewServiceImpl implements InterviewService {
 
         String raw;
         try {
-            raw = geminiClient.generateContent(key, body);
+            raw = geminiClient.generateContent(key, body, AiFeature.INTERVIEW);
+        } catch (GeminiException e) {
+            log.warn("Interview question generation failed for job {}: {}", ctx.jobId(), e.getCode());
+            if (e.unusable()) throw e;   // quota / key / model / cap: say exactly what to fix
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not reach the AI service to prepare interview questions. Please try again.");
         } catch (Exception e) {
             log.warn("Interview question generation failed for job {}: {}", ctx.jobId(), e.toString());
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not reach the AI service to prepare interview questions. Please try again.");

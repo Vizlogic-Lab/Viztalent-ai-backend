@@ -1,5 +1,7 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.GeminiException;
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
@@ -205,9 +207,9 @@ public class RubricGrader {
 
         JsonNode out;
         try {
-            JsonNode root = json.readTree(geminiClient.generateContent(apiKey, body));
+            JsonNode root = json.readTree(geminiClient.generateContent(apiKey, body, AiFeature.GRADING));
             out = json.readTree(root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText(""));
-        } catch (RestClientException e) {
+        } catch (GeminiException | RestClientException e) {
             log.warn("Rubric grading call failed: {}", e.getMessage());
             throw new Unavailable("The AI grader is unavailable.", e);
         } catch (Exception e) {

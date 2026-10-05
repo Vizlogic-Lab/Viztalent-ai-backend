@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
@@ -125,7 +126,7 @@ public class RecruiterChatServiceImpl implements RecruiterChatService {
             body.put("tools", List.of(Map.of("functionDeclarations", declarations)));
         }
 
-        String raw = geminiClient.generateContent(key, body);
+        String raw = geminiClient.generateContent(key, body, AiFeature.RECRUITER_CHAT);
 
         JsonNode root = objectMapper.readTree(raw);
         JsonNode parts = root.path("candidates").path(0).path("content").path("parts");

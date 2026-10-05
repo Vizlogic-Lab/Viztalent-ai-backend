@@ -41,7 +41,15 @@ app:
   # External APIs — configurable so tests (and local demos) can point at a stub.
   gemini:
     base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
-    model: ${GEMINI_MODEL:gemini-2.0-flash}
+    # Starting values only: admins choose the models in Settings → AI provider at
+    # runtime. No model name is built in — Google retires models.
+    model: ${GEMINI_MODEL:}
+    fallback-model: ${GEMINI_FALLBACK_MODEL:}
+  ai:
+    # Calls per UTC day before non-critical AI features pause (0 = no cap).
+    # Also editable in Settings → AI provider.
+    daily-call-cap: ${AI_DAILY_CALL_CAP:2000}
+    retry-base-ms: ${AI_RETRY_BASE_MS:1000}
   twilio:
     api-base-url: ${TWILIO_API_BASE_URL:https://api.twilio.com}
   # In-memory, per-IP, per-minute limits on the unauthenticated endpoints

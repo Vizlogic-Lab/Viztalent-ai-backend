@@ -2,6 +2,7 @@ package com.smartstaff.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartstaff.ai.AiFeature;
 import com.smartstaff.client.GeminiClient;
 import com.smartstaff.entity.*;
 import com.smartstaff.exception.ApiException;
@@ -16,7 +17,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.HttpStatusCodeException;
 
 import java.time.Instant;
 import java.util.*;
@@ -159,24 +159,12 @@ public class PersonalAssessmentGenerator {
                 "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
                 "generationConfig", Map.of("responseMimeType", "application/json", "responseSchema", schema(),
                         "temperature", 0.6));
+        String raw = gemini.generateContent(key, body, AiFeature.PERSONAL_ASSESSMENT);   // GeminiException carries a clear message
         try {
-            String raw = gemini.generateContent(key, body);
             return objectMapper.readTree(raw).path("candidates").path(0).path("content").path("parts").path(0)
                     .path("text").asText("");
-        } catch (HttpStatusCodeException e) {
-            int status = e.getStatusCode().value();
-            log.warn("Personal assessment: Gemini returned {}", status);
-            String msg = switch (status) {
-                case 429 -> "The AI key has run out of quota (Gemini 429). Add a key with quota in Settings → AI Provider, or try again after the quota resets.";
-                case 401, 403 -> "Gemini rejected the API key. Check it in Settings → AI Provider.";
-                case 404 -> "The configured Gemini model isn't available to this key (404).";
-                default -> "The AI service is unavailable right now (Gemini " + status + "). Please try again in a few minutes.";
-            };
-            throw new ApiException(HttpStatus.BAD_GATEWAY, msg, "ai_unavailable");
         } catch (Exception e) {
-            log.warn("Personal assessment: Gemini call failed: {}", e.toString());
-            throw new ApiException(HttpStatus.BAD_GATEWAY,
-                    "Couldn't reach the AI service to write the assessment. Please try again.", "ai_unavailable");
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "The AI service returned an unreadable reply. Please try again.", "ai_bad_output");
         }
     }
 

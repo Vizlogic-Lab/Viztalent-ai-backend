@@ -10,7 +10,6 @@ public interface SettingsService {
 
     SaveStatusResponse saveGeminiKey(GeminiKeyRequest req, User admin);
 
-    GeminiTestResponse testGeminiKey();
 
     PublicUrlSaveResponse savePublicUrl(PublicUrlRequest req, User admin);
 

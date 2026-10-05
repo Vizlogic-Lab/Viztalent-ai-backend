@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.AiFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.client.GeminiClient;
@@ -50,7 +51,7 @@ public class ResultSummarizer {
                 "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
                 "generationConfig", Map.of("responseMimeType", "application/json", "responseSchema", schema, "temperature", 0));
         try {
-            JsonNode root = json.readTree(gemini.generateContent(apiKey, body));
+            JsonNode root = json.readTree(gemini.generateContent(apiKey, body, AiFeature.SUMMARY));
             JsonNode out = json.readTree(root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText(""));
             String theory = out.path("theory_line").asText("").trim();
             String handsOn = out.path("hands_on_line").asText("").trim();
