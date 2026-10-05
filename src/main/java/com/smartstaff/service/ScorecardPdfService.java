@@ -189,7 +189,17 @@ public class ScorecardPdfService {
                 .append(" · Pastes: ").append(ev.getOrDefault("PASTE", 0L))
                 .append(" · Focus lost: ").append(ev.getOrDefault("FOCUS_LOST", 0L))
                 .append(" · Full-screen exits: ").append(ev.getOrDefault("FULLSCREEN_EXIT", 0L));
-        if (card.autoSubmitted()) sb.append(" · Auto-submitted when time ran out");
+        long camMic = ev.getOrDefault("CAMERA_OFF", 0L) + ev.getOrDefault("MIC_OFF", 0L);
+        long face = ev.getOrDefault("NO_FACE", 0L) + ev.getOrDefault("MULTIPLE_FACES", 0L) + ev.getOrDefault("LOOKING_AWAY", 0L);
+        if (camMic + face > 0) {
+            sb.append("\nCamera/mic off: ").append(camMic)
+                    .append(" · Face not visible: ").append(ev.getOrDefault("NO_FACE", 0L))
+                    .append(" · Multiple faces: ").append(ev.getOrDefault("MULTIPLE_FACES", 0L))
+                    .append(" · Looking away: ").append(ev.getOrDefault("LOOKING_AWAY", 0L))
+                    .append(" (face signals are for review only)");
+        }
+        if (ev.getOrDefault("TERMINATED", 0L) > 0) sb.append("\nTest ended automatically after 3 proctoring warnings");
+        else if (card.autoSubmitted()) sb.append(" · Auto-submitted when time ran out");
         if (card.flags() != null && !card.flags().isEmpty()) {
             sb.append("\nFlags: ").append(String.join(", ", card.flags()));
         }
