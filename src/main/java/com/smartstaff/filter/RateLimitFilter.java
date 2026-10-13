@@ -33,8 +33,12 @@ import java.io.IOException;
  *
  *  Client address is the socket's remote address. Set
  *  app.rate-limit.trust-forwarded-for=true only when running behind a
- *  reverse proxy you control that overwrites X-Forwarded-For — otherwise a
- *  caller could dodge the limit by forging the header. */
+ *  reverse proxy you control. Each proxy APPENDS the address it received the
+ *  request from, so only the right-hand end of X-Forwarded-For is trustworthy:
+ *  the client is the entry app.rate-limit.trusted-proxies positions from the
+ *  right (1 = a single proxy such as Dokploy's Traefik). Anything a caller
+ *  puts at the front of the header is ignored, so forging it can't reset
+ *  their budget. */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -45,6 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
     private final boolean enabled;
     private final boolean trustForwardedFor;
+    private final int trustedProxies;
     private final int authPerMinute;
     private final int tokenPerMinute;
     private final int runPerMinute;
@@ -53,6 +58,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             ObjectMapper objectMapper,
             @Value("${app.rate-limit.enabled}") boolean enabled,
             @Value("${app.rate-limit.trust-forwarded-for}") boolean trustForwardedFor,
+            @Value("${app.rate-limit.trusted-proxies:1}") int trustedProxies,
             @Value("${app.rate-limit.auth-per-minute}") int authPerMinute,
             @Value("${app.rate-limit.token-per-minute}") int tokenPerMinute,
             @Value("${app.rate-limit.run-per-minute:10}") int runPerMinute
@@ -60,6 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.trustForwardedFor = trustForwardedFor;
+        this.trustedProxies = Math.max(1, trustedProxies);
         this.authPerMinute = authPerMinute;
         this.tokenPerMinute = tokenPerMinute;
         this.runPerMinute = runPerMinute;
@@ -131,11 +138,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private String clientAddress(HttpServletRequest request) {
         if (trustForwardedFor) {
-            String forwarded = request.getHeader("X-Forwarded-For");
-            if (forwarded != null && !forwarded.isBlank()) {
-                return forwarded.split(",")[0].trim();
-            }
+            String client = clientFromForwarded(request.getHeader("X-Forwarded-For"), trustedProxies);
+            if (client != null) return client;
         }
         return request.getRemoteAddr();
+    }
+
+    /** The client in an X-Forwarded-For chain: the entry {@code trustedProxies}
+     *  positions from the right (or the leftmost, if the chain is shorter).
+     *  Null when the header is absent or has no usable entry. */
+    static String clientFromForwarded(String header, int trustedProxies) {
+        if (header == null || header.isBlank()) return null;
+        String[] parts = java.util.Arrays.stream(header.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
+        if (parts.length == 0) return null;
+        return parts[Math.max(0, parts.length - Math.max(1, trustedProxies))];
     }
 }

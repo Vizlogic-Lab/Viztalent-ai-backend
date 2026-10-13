@@ -110,13 +110,24 @@ class RateLimitIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("behind a trusted proxy the client is the FIRST X-Forwarded-For entry, whatever proxies were appended")
-    void firstForwardedEntryIsTheClient() throws Exception {
-        login("198.51.100.7, 10.0.0.1", "nobody", "wrong");
-        login("198.51.100.7, 10.0.0.2", "nobody", "wrong");
+    @DisplayName("behind one trusted proxy the client is the LAST X-Forwarded-For entry (the one the proxy appended)")
+    void lastForwardedEntryIsTheClient() throws Exception {
         login("198.51.100.7", "nobody", "wrong");
+        login("10.9.9.9, 198.51.100.7", "nobody", "wrong");
+        login("10.8.8.8, 198.51.100.7", "nobody", "wrong");
 
-        login("198.51.100.7, 10.0.0.3", "nobody", "wrong").andExpect(status().isTooManyRequests());
+        login("198.51.100.7", "nobody", "wrong").andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    @DisplayName("a client forging the front of X-Forwarded-For can't get a fresh budget")
+    void forgedForwardedPrefixDoesNotResetBudget() throws Exception {
+        String realClient = "198.51.100.8";
+        for (int i = 1; i <= 3; i++) {
+            login("6.6.6." + i + ", " + realClient, "nobody", "wrong").andExpect(status().isUnauthorized());
+        }
+
+        login("7.7.7.7, " + realClient, "nobody", "wrong").andExpect(status().isTooManyRequests());
     }
 
     @Test

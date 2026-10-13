@@ -74,6 +74,9 @@ app:
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
+    # How many proxies you control sit in front of the app (Dokploy/Traefik = 1).
+    # The client is read that many entries from the RIGHT of X-Forwarded-For.
+    trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:1}
     auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
     token-per-minute: ${RATE_LIMIT_TOKEN_PER_MINUTE:30}
     # Candidate "Run code" presses, per invite token (one candidate).

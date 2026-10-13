@@ -77,7 +77,7 @@ BOOTSTRAP_ADMIN_PASSWORD=<strong temporary password>
 BOOTSTRAP_ADMIN_NAME=<your name>
 ```
 - [ ] `SPRING_PROFILES_ACTIVE=prod` and `STORAGE_DIR=/app/storage` are already set inside the image — no need to add.
-- [ ] ⚠️ `RATE_LIMIT_TRUST_FORWARDED_FOR=true` — behind Traefik every request comes from one IP; without this **all users share 10 logins/minute**.
+- [ ] ⚠️ `RATE_LIMIT_TRUST_FORWARDED_FOR=true` — behind Traefik every request comes from one IP; without this **all users share 10 logins/minute**. The client is read from the right of `X-Forwarded-For` (forging the header doesn't help). Leave `RATE_LIMIT_TRUSTED_PROXIES` at its default `1`; set `2` only if you put a CDN such as Cloudflare in front of Dokploy.
 - [ ] ⚠️ `BOOTSTRAP_ADMIN_*` — production has **no demo logins**. This creates the first admin (must change password at first login). **Remove these two variables after the first successful start.**
 - [ ] Optional: `GEMINI_API_KEY` (or paste it later in Settings), `SMTP_PASSWORD`.
 
@@ -164,7 +164,6 @@ BOOTSTRAP_ADMIN_NAME=<your name>
 ## Known limitations (acceptable for launch, track them)
 
 - Rate limits are in-memory → correct for **one** backend container only. Don't scale to 2+ replicas without changing this.
-- The rate limiter trusts the **first** `X-Forwarded-For` entry, which a client can spoof to dodge limits. Fine to launch; harden later (use the proxy-appended value).
 - Phone interviews have never run against a **real** Twilio call — test before promising it to customers.
 - Interview **video** recording is designed (`INTERVIEW_CHANNELS_DESIGN.md`) but not built.
 - Uploads on a single volume — move to S3/MinIO if the VPS disk becomes a concern.
