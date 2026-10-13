@@ -51,7 +51,8 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         assertThat(gemini.path("configured").asBoolean()).isTrue();
         assertThat(gemini.path("has_key").asBoolean()).isTrue();
         assertThat(gemini.path("model").asText()).isEqualTo(TEST_MODEL);
-        assertThat(gemini.path("key_preview").asText()).isEqualTo("AIza…7890");
+        assertThat(gemini.path("key_preview").asText()).isEqualTo("****7890");
+        assertThat(gemini.path("key_source").asText()).isEqualTo("settings");
         assertThat(response).as("the full key must never be returned").doesNotContain(GEMINI_KEY);
 
         String stored = storedValue("gemini_api_key");
@@ -153,8 +154,8 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         JsonNode twilio = json.readTree(response).path("twilio");
         assertThat(twilio.path("configured").asBoolean()).isTrue();
         assertThat(twilio.path("from_number").asText()).isEqualTo("+15550001111");
-        assertThat(twilio.path("account_sid_preview").asText()).isEqualTo("ACab…cdef");
-        assertThat(twilio.path("auth_token_preview").asText()).isEqualTo("supe…9999");
+        assertThat(twilio.path("account_sid_preview").asText()).isEqualTo("****cdef");
+        assertThat(twilio.path("auth_token_preview").asText()).isEqualTo("****9999");
         assertThat(response).doesNotContain("super-secret-auth-token-9999").doesNotContain("ACabcdef0123456789abcdef");
 
         assertThat(storedValue("twilio_auth_token")).isNotEqualTo("super-secret-auth-token-9999").doesNotContain("super-secret");
@@ -171,7 +172,7 @@ class SettingsIntegrationTest extends IntegrationTestBase {
         JsonNode twilio = config().path("twilio");
         assertThat(twilio.path("from_number").asText()).isEqualTo("+15552223333");
         assertThat(twilio.path("configured").asBoolean()).as("sid and token survived").isTrue();
-        assertThat(twilio.path("account_sid_preview").asText()).isEqualTo("ACab…cdef");
+        assertThat(twilio.path("account_sid_preview").asText()).isEqualTo("****cdef");
     }
 
     @Test

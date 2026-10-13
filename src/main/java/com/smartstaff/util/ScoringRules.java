@@ -48,6 +48,12 @@ public final class ScoringRules {
 
     public static Result score(List<Scored> questions, ScoringSettings settings, Collection<String> questionFlags,
                                long tabSwitches) {
+        return score(questions, settings, questionFlags, tabSwitches, false);
+    }
+
+    /** proctoringConcern (ProctoringRules.concern) adds PROCTORING_CONCERN and forces HR_REVIEW. */
+    public static Result score(List<Scored> questions, ScoringSettings settings, Collection<String> questionFlags,
+                               long tabSwitches, boolean proctoringConcern) {
         ScoringSettings s = ScoringSettings.orDefaults(settings);
         BigDecimal theory = percent(questions, q -> q.dimension() == Dimension.THEORY);
         BigDecimal handsOn = percent(questions, q -> q.dimension() == Dimension.HANDS_ON);
@@ -71,7 +77,8 @@ public final class ScoringRules {
         if (theory != null && handsOn != null && t - h >= s.theory_practice_gap()) flags.add(GAP_FLAG);
         boolean tabs = tabSwitches > s.max_tab_switches();
         if (tabs) flags.add(TAB_FLAG);
-        boolean concern = tabs || questionFlags.stream().anyMatch(REVIEW_FLAGS::contains);
+        if (proctoringConcern) flags.add(ProctoringRules.CONCERN_FLAG);
+        boolean concern = tabs || proctoringConcern || questionFlags.stream().anyMatch(REVIEW_FLAGS::contains);
 
         // A missing dimension doesn't block its gate.
         boolean handsOnPass = handsOn == null || h >= s.proceed_hands_on_min();

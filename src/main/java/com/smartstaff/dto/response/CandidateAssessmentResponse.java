@@ -34,7 +34,9 @@ public record CandidateAssessmentResponse(
         Integer run_limit,
         String message,
         List<CandidateQuestionView> questions,
-        List<CandidateAnswerView> saved_answers
+        List<CandidateAnswerView> saved_answers,
+        /** Proctoring warnings so far, counted by the server from stored events. */
+        int warnings
 ) {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record LevelStatus(String level, String status, Boolean auto_submitted, Instant submitted_at) {}

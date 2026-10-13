@@ -107,15 +107,28 @@ class ResultsIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("more than 5 tab switches → HR_REVIEW with EXCESSIVE_TAB_SWITCHES")
+    @DisplayName("more than 5 tab switches → HR_REVIEW with EXCESSIVE_TAB_SWITCHES (and the proctoring concern)")
     void tabSwitchesForceReview() throws Exception {
+        java.time.Instant t0 = java.time.Instant.now();
         List<Map<String, Object>> evs = new ArrayList<>();
-        for (int i = 0; i < 6; i++) evs.add(Map.of("type", "TAB_SWITCH", "payload", Map.of()));
+        for (int i = 0; i < 6; i++) evs.add(Map.of("type", "TAB_SWITCH", "payload", Map.of(), "at", t0.plusSeconds(5L * i).toString()));
         postJson(BASE + token + "/events", Map.of("events", evs)).andExpect(status().isOk());
         answerCodeAndSubmit();
         Map<String, Object> a = attempt();
         assertThat(a.get("recommendation")).isEqualTo("HR_REVIEW");
-        assertThat((String) a.get("flags")).contains("EXCESSIVE_TAB_SWITCHES");
+        assertThat((String) a.get("flags")).contains("EXCESSIVE_TAB_SWITCHES").contains("PROCTORING_CONCERN");
+    }
+
+    @Test
+    @DisplayName("a second face or a phone on camera sends an otherwise passing result to HR review (proctoring never ends the test)")
+    void proctoringFlagForcesReview() throws Exception {
+        postJson(BASE + token + "/events", Map.of("events", List.of(
+                Map.of("type", "MULTIPLE_FACES", "payload", Map.of("seconds", 4, "confidence", 0.9))))).andExpect(status().isOk());
+        answerCodeAndSubmit();
+        Map<String, Object> a = attempt();
+        assertThat(a.get("status")).isNotEqualTo("IN_PROGRESS");
+        assertThat(a.get("recommendation")).isEqualTo("HR_REVIEW");
+        assertThat((String) a.get("flags")).contains("PROCTORING_CONCERN");
     }
 
     @Test

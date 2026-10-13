@@ -28,12 +28,20 @@ public enum QuestionType {
         return this == CODE_WRITE || this == CODE_DEBUG || this == CODE_OUTPUT;
     }
 
-    /** Question-bank uploads still use the legacy names DESCRIPTIVE and CODING. */
+    /** Question-bank uploads use the legacy names DESCRIPTIVE and CODING, and the
+     *  section labels HR teams write in spreadsheets ("Subjective", "Code & Bug",
+     *  "Logical / Output"). Punctuation and spacing are ignored. */
     public static QuestionType fromBankType(String type) {
-        String t = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
+        String t = type == null ? "" : type.trim().toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]+", "_").replaceAll("^_|_$", "");
         return switch (t) {
-            case "DESCRIPTIVE" -> SCENARIO;
-            case "CODING" -> CODE_WRITE;
+            case "DESCRIPTIVE", "SUBJECTIVE", "THEORY", "WRITTEN" -> SCENARIO;
+            case "CODING", "CODE" -> CODE_WRITE;
+            case "CODE_BUG", "CODE_AND_BUG", "BUG", "BUG_FIX", "BUG_FIXING", "DEBUG", "DEBUGGING" -> CODE_DEBUG;
+            case "OUTPUT", "CODE_OUTPUT", "PREDICT_OUTPUT" -> CODE_OUTPUT;
+            case "LOGICAL", "LOGICAL_OUTPUT", "LOGIC", "REASONING", "APTITUDE" -> LOGIC;
+            case "MULTIPLE_CHOICE", "SINGLE_CHOICE" -> MCQ;
+            case "MULTIPLE_SELECT", "MULTI_SELECT", "MULTIPLE_ANSWER" -> MSQ;
             default -> valueOf(t);
         };
     }

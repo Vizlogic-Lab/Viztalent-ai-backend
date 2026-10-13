@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.ai.GeminiException;
 import com.smartstaff.dto.request.InviteMintRequest;
 import com.smartstaff.dto.response.InviteMintResponse;
 import com.smartstaff.dto.response.InviteResponse;
@@ -18,6 +19,8 @@ import com.smartstaff.repository.JobRepository;
 import com.smartstaff.service.InviteService;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.InviteLinks;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Mints single-use, expiring candidate assessment links. Only the SHA-256
@@ -42,6 +46,8 @@ import java.util.UUID;
  *  untouched. See docs/FEATURES.md. */
 @Service
 public class InviteServiceImpl implements InviteService {
+
+    private static final Logger log = LoggerFactory.getLogger(InviteServiceImpl.class);
 
     private final EmailService emailService;
     private final ActivityRecorder activity;
@@ -95,16 +101,25 @@ public class InviteServiceImpl implements InviteService {
                 .filter(c -> c.getResume() != null && c.getResume().getExtractedText() != null
                         && !c.getResume().getExtractedText().isBlank())
                 .orElse(null);
-        Assessment assessment;
+        // If the AI can't write the personal one (quota, key, bad reply), fall back to
+        // the job's shared assessment so the invite still goes out.
+        Assessment assessment = null;
         if (candidate != null) {
-            UUID id = personalAssessments.readyFor(candidate.getId());
-            assessment = assessmentRepository.findById(id).orElseThrow();
-            levels = List.of(PersonalAssessmentGenerator.LEVEL);
-            req = new InviteMintRequest(req.session_id(), req.candidate_email(), req.candidate_name(), levels, false,
-                    req.send_email());
-        } else {
-            assessment = assessmentRepository.findByJobIdAndCurrentTrue(jobId)
-                    .filter(a -> a.getStatus() == AssessmentStatus.READY)
+            try {
+                UUID id = personalAssessments.readyFor(candidate.getId());
+                assessment = assessmentRepository.findById(id).orElseThrow();
+                levels = List.of(PersonalAssessmentGenerator.LEVEL);
+                req = new InviteMintRequest(req.session_id(), req.candidate_email(), req.candidate_name(), levels, false,
+                        req.send_email());
+            } catch (ApiException e) {
+                if (!isAiFailure(e)) throw e;
+                assessment = sharedReadyAssessment(jobId).orElseThrow(() -> e);
+                log.warn("Personal assessment for candidate {} unavailable ({}); inviting with the job's shared assessment",
+                        candidate.getId(), e.getMessage());
+            }
+        }
+        if (assessment == null) {
+            assessment = sharedReadyAssessment(jobId)
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
                             "There is no ready assessment for this job yet — generate one first.", "no_ready_assessment"));
         }
@@ -157,6 +172,17 @@ public class InviteServiceImpl implements InviteService {
         EmailService.Queued email = Boolean.TRUE.equals(req.send_email())
                 ? emailService.queueInvite(invite, job.getTitle(), url, rawToken, admin) : null;
         return new InviteResponse(String.join(",", levels), url, ttlSeconds, email);
+    }
+
+    private Optional<Assessment> sharedReadyAssessment(UUID jobId) {
+        return assessmentRepository.findByJobIdAndCurrentTrue(jobId)
+                .filter(a -> a.getStatus() == AssessmentStatus.READY);
+    }
+
+    /** The AI couldn't produce the assessment, as opposed to bad input (no JD, unreadable resume). */
+    private static boolean isAiFailure(ApiException e) {
+        return e instanceof GeminiException
+                || "no_ai_key".equals(e.getCode()) || "ai_bad_output".equals(e.getCode());
     }
 
     private static UUID parseSessionId(String sessionId) {

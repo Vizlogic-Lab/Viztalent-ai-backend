@@ -3,7 +3,7 @@
 Mermaid diagrams for onboarding. Paste any block into the Mermaid Live Editor
 (https://mermaid.live) or view in any Markdown renderer that supports Mermaid.
 
-Companion to [ONBOARDING.md](ONBOARDING.md).
+Companion to [ONBOARDING.md](ONBOARDING.md). For the assessment flow's known problems and target design (AI gateway, fallbacks, Gemini Pro plan) see [ASSESSMENT_ARCHITECTURE.md](ASSESSMENT_ARCHITECTURE.md).
 
 ---
 

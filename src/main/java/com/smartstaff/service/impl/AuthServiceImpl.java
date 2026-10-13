@@ -13,6 +13,7 @@ import com.smartstaff.mapper.UserMapper;
 import com.smartstaff.repository.UserRepository;
 import com.smartstaff.security.JwtService;
 import com.smartstaff.service.AuthService;
+import com.smartstaff.util.PasswordPolicy;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -178,24 +179,18 @@ public class AuthServiceImpl implements AuthService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.", "wrong_password");
         }
         validatePasswordPolicy(newPassword);
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Choose a password different from the current one.", "same_password");
+        }
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(false);   // the bootstrap admin is now free to use the app
         userRepository.save(user);
     }
 
     private static void validatePasswordPolicy(String password) {
-        if (password.length() < 10) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must be at least 10 characters.");
-        }
-        if (!password.matches(".*[a-zA-Z].*")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must contain at least one letter.");
-        }
-        if (!password.matches(".*\\d.*")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Password must contain at least one digit.");
-        }
+        String problem = PasswordPolicy.problem(password);
+        if (problem != null) throw new ApiException(HttpStatus.BAD_REQUEST, problem);
     }
 
     private static String blankToNull(String name, String fallback) {

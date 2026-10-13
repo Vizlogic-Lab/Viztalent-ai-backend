@@ -58,11 +58,12 @@ class CryptoServiceTest {
     }
 
     @Test
-    @DisplayName("mask() shows enough to recognise a key without revealing it")
+    @DisplayName("mask() shows only the last 4 characters (****abcd), and nothing of short values")
     void mask() {
         assertThat(CryptoService.mask(null)).isNull();
         assertThat(CryptoService.mask("  ")).isNull();
-        assertThat(CryptoService.mask("short")).isEqualTo("*****");
-        assertThat(CryptoService.mask("AIzaSyABCDEFGHIJKLMNOP7890")).isEqualTo("AIza…7890");
+        assertThat(CryptoService.mask("short")).isEqualTo("****");
+        assertThat(CryptoService.mask("elevenchars")).isEqualTo("****");
+        assertThat(CryptoService.mask("AIzaSyABCDEFGHIJKLMNOP7890")).isEqualTo("****7890");
     }
 }

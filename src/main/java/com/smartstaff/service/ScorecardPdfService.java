@@ -189,15 +189,20 @@ public class ScorecardPdfService {
                 .append(" · Pastes: ").append(ev.getOrDefault("PASTE", 0L))
                 .append(" · Focus lost: ").append(ev.getOrDefault("FOCUS_LOST", 0L))
                 .append(" · Full-screen exits: ").append(ev.getOrDefault("FULLSCREEN_EXIT", 0L));
-        long camMic = ev.getOrDefault("CAMERA_OFF", 0L) + ev.getOrDefault("MIC_OFF", 0L);
-        long face = ev.getOrDefault("NO_FACE", 0L) + ev.getOrDefault("MULTIPLE_FACES", 0L) + ev.getOrDefault("LOOKING_AWAY", 0L);
-        if (camMic + face > 0) {
-            sb.append("\nCamera/mic off: ").append(camMic)
+        long cam = ev.getOrDefault("CAMERA_OFF", 0L);
+        long mic = ev.getOrDefault("MIC_OFF", 0L) + ev.getOrDefault("MIC_MUTED", 0L) + ev.getOrDefault("MIC_LOST", 0L);
+        long flags = ev.getOrDefault("NO_FACE", 0L) + ev.getOrDefault("MULTIPLE_FACES", 0L) + ev.getOrDefault("LOOKING_AWAY", 0L)
+                + ev.getOrDefault("PHONE_DETECTED", 0L) + ev.getOrDefault("MIC_SILENT", 0L);
+        if (cam + mic + flags > 0) {
+            sb.append("\nCamera off: ").append(cam)
+                    .append(" · Mic muted/lost: ").append(mic)
                     .append(" · Face not visible: ").append(ev.getOrDefault("NO_FACE", 0L))
                     .append(" · Multiple faces: ").append(ev.getOrDefault("MULTIPLE_FACES", 0L))
                     .append(" · Looking away: ").append(ev.getOrDefault("LOOKING_AWAY", 0L))
-                    .append(" (face signals are for review only)");
+                    .append(" · Phone seen: ").append(ev.getOrDefault("PHONE_DETECTED", 0L))
+                    .append(" (face, eye and phone signals are for review only)");
         }
+        // Legacy: before L3, the 3rd warning ended the test.
         if (ev.getOrDefault("TERMINATED", 0L) > 0) sb.append("\nTest ended automatically after 3 proctoring warnings");
         else if (card.autoSubmitted()) sb.append(" · Auto-submitted when time ran out");
         if (card.flags() != null && !card.flags().isEmpty()) {

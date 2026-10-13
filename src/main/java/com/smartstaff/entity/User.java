@@ -62,6 +62,11 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** Set for the bootstrap admin: until they change the password, only /api/auth/me,
+     *  /api/auth/change_password and /api/auth/logout are allowed (JwtAuthFilter). */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     public User(Role role, String name, String email, String employeeId, String passwordHash, AccountStatus status) {
         this.role = role;
         this.name = name;

@@ -52,6 +52,12 @@ public class CandidateAssessmentController {
         return ResponseEntity.ok(service.submit(token, req));
     }
 
+    /** The proctoring checks for this test (consent screen). Doesn't start the clock. */
+    @GetMapping("/proctoring")
+    public ResponseEntity<com.smartstaff.proctoring.CandidateProctoringView> proctoring(@PathVariable String token) {
+        return ResponseEntity.ok(service.proctoring(token));
+    }
+
     @PostMapping("/events")
     public ResponseEntity<AttemptEventsResponse> events(@PathVariable String token,
                                                         @RequestBody AttemptEventsRequest req) {

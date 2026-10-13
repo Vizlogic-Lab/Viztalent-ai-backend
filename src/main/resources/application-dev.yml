@@ -1,0 +1,6 @@
+# Local development (SPRING_PROFILES_ACTIVE=dev): read secrets from a git-ignored .env
+# in the working directory (copy .env.example, or run scripts/generate-secrets.sh).
+# Also enables DemoDataSeeder. Never use this profile on a server.
+spring:
+  config:
+    import: optional:file:.env[.properties]

@@ -28,11 +28,12 @@ class F0_2_SecurityGapsIntegrationTest extends IntegrationTestBase {
     // ── 1. demo data never seeded in prod ───────────────────────────────
 
     @Test
-    @DisplayName("DemoDataSeeder is excluded from the prod profile")
-    void seederNotInProd() {
+    @DisplayName("DemoDataSeeder runs only under the dev profile (never in tests or prod)")
+    void seederOnlyInDev() {
         Profile profile = DemoDataSeeder.class.getAnnotation(Profile.class);
         assertThat(profile).isNotNull();
-        assertThat(profile.value()).containsExactly("!prod");
+        assertThat(profile.value()).containsExactly("dev");
+        assertThat(users.existsByEmailIgnoreCase("admin@viztalent.demo")).as("not seeded in tests").isFalse();
     }
 
     // ── 2. signed downloads ─────────────────────────────────────────────

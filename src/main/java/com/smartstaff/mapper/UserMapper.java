@@ -22,7 +22,8 @@ public class UserMapper {
                 u.getLastSeenAt(),
                 u.getLastLoginAt(),
                 u.getCreatedAt(),
-                u.getRole() == Role.REVIEWER ? List.copyOf(u.getReviewerSkills()) : null
+                u.getRole() == Role.REVIEWER ? List.copyOf(u.getReviewerSkills()) : null,
+                u.isMustChangePassword()
         );
     }
 }

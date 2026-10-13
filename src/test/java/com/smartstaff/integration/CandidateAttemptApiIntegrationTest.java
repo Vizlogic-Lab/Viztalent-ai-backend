@@ -236,10 +236,15 @@ class CandidateAttemptApiIntegrationTest extends IntegrationTestBase {
                 + "on t.id = e.attempt_id where e.type = 'PASTE' and t.job_id = ?::uuid", String.class, job);
         assertThat(paste).contains("120").doesNotContain("xxxx");
 
-        List<Map<String, Object>> many = new ArrayList<>();
-        for (int i = 0; i < 510; i++) many.add(Map.of("type", "FOCUS_LOST", "payload", Map.of()));
-        JsonNode bulk = bodyOf(postJson(BASE + token + "/events", Map.of("events", many)).andExpect(status().isOk()));
-        assertThat(bulk.path("stored").asInt()).isEqualTo(498);
+        // The 500-per-attempt cap: fill to 499, then only one more fits.
+        String attemptId = jdbc.queryForObject("select id::text from assessment_attempts where job_id = ?::uuid", String.class, job);
+        jdbc.update("insert into attempt_events (attempt_id, type, at) select ?::uuid, 'FOCUS_LOST', now() - (g || ' seconds')::interval "
+                + "from generate_series(1, 497) g", attemptId);
+        java.time.Instant t = java.time.Instant.now();
+        JsonNode bulk = bodyOf(postJson(BASE + token + "/events", Map.of("events", List.of(
+                Map.of("type", "PASTE", "payload", Map.of("length", 1), "at", t.toString()),
+                Map.of("type", "FOCUS_LOST", "payload", Map.of(), "at", t.plusSeconds(2).toString())))).andExpect(status().isOk()));
+        assertThat(bulk.path("stored").asInt()).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from attempt_events e join assessment_attempts t "
                 + "on t.id = e.attempt_id where t.job_id = ?::uuid", Integer.class, job)).isEqualTo(500);
     }

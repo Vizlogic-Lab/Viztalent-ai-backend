@@ -68,9 +68,11 @@ public class CryptoService {
     }
 
     /** "AIzaSyABCD...WXYZ" style preview — enough to recognize the key without exposing it. */
+    /** "****abcd": only the last 4 characters, and only for values long enough that
+     *  4 characters reveal little; shorter values are fully masked. */
     public static String mask(String value) {
         if (value == null || value.isBlank()) return null;
-        if (value.length() <= 8) return "*".repeat(value.length());
-        return value.substring(0, 4) + "…" + value.substring(value.length() - 4);
+        if (value.length() < 12) return "****";
+        return "****" + value.substring(value.length() - 4);
     }
 }

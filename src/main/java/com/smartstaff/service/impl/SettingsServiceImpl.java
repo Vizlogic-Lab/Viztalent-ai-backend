@@ -12,6 +12,7 @@ import com.smartstaff.exception.ApiException;
 import com.smartstaff.repository.AppSettingRepository;
 import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.CryptoService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,8 @@ public class SettingsServiceImpl implements SettingsService {
 
     private final AppSettingRepository settings;
     private final CryptoService crypto;
+    /** GEMINI_API_KEY from the server environment; overrides the saved key. Null when unset. */
+    private final String envGeminiKey;
     private final ObjectMapper objectMapper;
     private final GeminiClient geminiClient;
     private final TwilioClient twilioClient;
@@ -55,7 +58,9 @@ public class SettingsServiceImpl implements SettingsService {
     private final RestClient pistonClient = RestClient.builder().requestFactory(pistonRequestFactory()).build();
 
     public SettingsServiceImpl(AppSettingRepository settings, CryptoService crypto, ObjectMapper objectMapper,
-                                GeminiClient geminiClient, TwilioClient twilioClient) {
+                                GeminiClient geminiClient, TwilioClient twilioClient,
+                                @Value("${app.gemini.api-key:}") String envGeminiKey) {
+        this.envGeminiKey = envGeminiKey == null || envGeminiKey.isBlank() ? null : envGeminiKey.strip();
         this.settings = settings;
         this.crypto = crypto;
         this.objectMapper = objectMapper;
@@ -72,8 +77,9 @@ public class SettingsServiceImpl implements SettingsService {
 
     @Override
     public ConfigResponse getConfig() {
-        String geminiKey = decryptedOrNull(KEY_GEMINI_API_KEY);
+        String geminiKey = getGeminiApiKeyOrNull();
         boolean hasGeminiKey = geminiKey != null && !geminiKey.isBlank();
+        String keySource = !hasGeminiKey ? null : envGeminiKey != null ? "environment" : "settings";
 
         String publicUrl = plain(KEY_PUBLIC_BASE_URL).orElse("http://localhost:8000");
         boolean isLocalhost = publicUrl.contains("localhost") || publicUrl.contains("127.0.0.1") || publicUrl.contains("0.0.0.0");
@@ -91,7 +97,8 @@ public class SettingsServiceImpl implements SettingsService {
 
         return new ConfigResponse(
                 true,
-                new GeminiConfigInfo(hasGeminiKey, hasGeminiKey, hasGeminiKey ? geminiClient.model() : null, CryptoService.mask(geminiKey)),
+                new GeminiConfigInfo(hasGeminiKey, hasGeminiKey, hasGeminiKey ? geminiClient.model() : null, CryptoService.mask(geminiKey),
+                        keySource),
                 new PublicUrlConfigInfo(publicUrl, isLocalhost, publicUrl),
                 new TwilioConfigInfo(twilioConfigured, CryptoService.mask(twilioSid), CryptoService.mask(twilioToken), twilioFrom),
                 new CodeRunnerConfigInfo(pistonUrl, pistonEnabled, languages),
@@ -212,7 +219,8 @@ public class SettingsServiceImpl implements SettingsService {
 
     @Override
     public String getGeminiApiKeyOrNull() {
-        return decryptedOrNull(KEY_GEMINI_API_KEY);
+        // GEMINI_API_KEY (server environment) wins over the key saved in Settings.
+        return envGeminiKey != null ? envGeminiKey : decryptedOrNull(KEY_GEMINI_API_KEY);
     }
 
     @Override

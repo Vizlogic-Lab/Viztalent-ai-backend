@@ -5,7 +5,8 @@
 # and data never collide. Host port 15433 avoids native Postgres (5432)
 # and the other stack's Docker Postgres (15432).
 #
-# Usage:
+# Usage (needs a .env next to this file; copy .env.example and fill it in,
+# or run scripts/generate-secrets.sh):
 #   docker compose up -d
 #   docker compose down          # stop (keeps data)
 #   docker compose down -v       # stop AND delete data
@@ -17,7 +18,7 @@ services:
     environment:
       POSTGRES_DB: smartstaff_classic
       POSTGRES_USER: smartstaff_classic
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstaff_classic_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env (see .env.example)}
     ports:
       - "15433:5432"
     volumes:
@@ -39,8 +40,11 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/smartstaff_classic
       SPRING_DATASOURCE_USERNAME: smartstaff_classic
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-smartstaff_classic_dev}
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set APP_JWT_SECRET in .env}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set SETTINGS_ENCRYPTION_KEY in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.proctoring.ProctoringService;
 import com.smartstaff.dto.request.QuestionEditRequest;
 import com.smartstaff.dto.response.AssessmentQuestionResponse;
 import com.smartstaff.entity.*;
@@ -64,6 +65,7 @@ public class ReviewService {
     private final InterviewRepository interviews;
     private final InterviewTurnRepository interviewTurns;
     private final TransactionTemplate tx;
+    private final ProctoringService proctoring;
 
     public ReviewService(SmeReviewRepository reviews, ReviewAuditRepository audit, JobReviewerRepository jobReviewers,
                          JobRepository jobs, UserRepository users, AssessmentRepository assessments,
@@ -71,7 +73,9 @@ public class ReviewService {
                          AssessmentAnswerRepository answers, AttemptEventRepository events,
                          JobRoleProfileRepository roleProfiles, AssessmentQuestionService questionService,
                          AssessmentMapper mapper, PlatformTransactionManager transactionManager,
-            ActivityRecorder activity, InterviewRepository interviews, InterviewTurnRepository interviewTurns) {
+            ActivityRecorder activity, InterviewRepository interviews, InterviewTurnRepository interviewTurns,
+            ProctoringService proctoring) {
+        this.proctoring = proctoring;
         this.interviews = interviews;
         this.interviewTurns = interviewTurns;
         this.activity = activity;
@@ -483,7 +487,8 @@ public class ReviewService {
             if (narrated.get(i).earned() < narrated.get(i).points() / 2.0) weak.add(lines.get(i));
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
-        ScoringRules.Result res = ScoringRules.score(scored, a.getJob().getScoringSettings(), gateFlags, tabs);
+        ScoringRules.Result res = ScoringRules.score(scored, a.getJob().getScoringSettings(), gateFlags, tabs,
+                proctoring.concern(a.getId()));
         a.setTheoryScore(res.theory());
         a.setHandsOnScore(res.handsOn());
         a.setOverallScore(res.overall());

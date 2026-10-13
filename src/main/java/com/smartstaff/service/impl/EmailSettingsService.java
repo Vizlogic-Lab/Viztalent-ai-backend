@@ -9,6 +9,7 @@ import com.smartstaff.util.CryptoService;
 import com.smartstaff.util.EmailTemplates;
 import com.smartstaff.util.EmailTemplates.Kind;
 import com.smartstaff.util.EmailTemplates.Template;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,8 +43,12 @@ public class EmailSettingsService {
     private final AppSettingRepository settings;
     private final CryptoService crypto;
     private final ObjectMapper json;
+    /** SMTP_PASSWORD from the server environment; overrides the saved password. Null when unset. */
+    private final String envPassword;
 
-    public EmailSettingsService(AppSettingRepository settings, CryptoService crypto, ObjectMapper json) {
+    public EmailSettingsService(AppSettingRepository settings, CryptoService crypto, ObjectMapper json,
+                                @Value("${app.smtp.password:}") String envPassword) {
+        this.envPassword = envPassword == null || envPassword.isBlank() ? null : envPassword;
         this.settings = settings;
         this.crypto = crypto;
         this.json = json;
@@ -60,8 +65,9 @@ public class EmailSettingsService {
         String host = plain(HOST), from = plain(FROM);
         if (host == null || from == null) return null;
         String pw = plain(PASSWORD);
+        String password = envPassword != null ? envPassword : pw == null ? null : crypto.decrypt(pw);
         return new Smtp(host, Integer.parseInt(Optional.ofNullable(plain(PORT)).orElse("587")), plain(USERNAME),
-                pw == null ? null : crypto.decrypt(pw), from, !"false".equals(plain(TLS)));
+                password, from, !"false".equals(plain(TLS)));
     }
 
     public boolean configured() {
@@ -77,6 +83,7 @@ public class EmailSettingsService {
         m.put("port", plain(PORT) == null ? 587 : Integer.parseInt(plain(PORT)));
         m.put("username", plain(USERNAME));
         m.put("password", s == null || s.password() == null ? null : CryptoService.mask(s.password()));
+        m.put("password_source", envPassword != null ? "environment" : plain(PASSWORD) != null ? "settings" : null);
         m.put("from_address", plain(FROM));
         m.put("tls", !"false".equals(plain(TLS)));
         return m;

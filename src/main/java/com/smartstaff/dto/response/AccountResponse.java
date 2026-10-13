@@ -20,5 +20,7 @@ public record AccountResponse(
         Instant last_seen_at,
         Instant last_login_at,
         Instant created_at,
-        List<String> reviewer_skills
+        List<String> reviewer_skills,
+        /** True until the bootstrap admin has replaced the initial password. */
+        boolean must_change_password
 ) {}

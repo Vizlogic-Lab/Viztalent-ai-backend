@@ -1,5 +1,6 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.proctoring.ProctoringService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.entity.*;
@@ -79,6 +80,7 @@ public class EvaluationJob {
     private final double disagreementThreshold;
     private final int hardcodeMinLiteral;
     private final Duration retryWindow;
+    private final ProctoringService proctoring;
 
     public EvaluationJob(AssessmentAttemptRepository attempts, AssessmentAnswerRepository answers,
                          AssessmentQuestionRepository questions, CodeRunRepository codeRuns,
@@ -92,7 +94,8 @@ public class EvaluationJob {
                          @Value("${app.evaluation.disagreement-threshold:0.15}") double disagreementThreshold,
                          @Value("${app.evaluation.hardcode-min-literal-length:3}") int hardcodeMinLiteral,
                          @Value("${app.evaluation.retry-window-minutes:60}") long retryWindowMinutes,
-            ActivityRecorder activity) {
+            ActivityRecorder activity, ProctoringService proctoring) {
+        this.proctoring = proctoring;
         this.activity = activity;
         this.attempts = attempts;
         this.answers = answers;
@@ -523,7 +526,8 @@ public class EvaluationJob {
             if (narrated.get(i).earned() < narrated.get(i).points() / 2.0) weak.add(lines.get(i));
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
-        ScoringRules.Result r = ScoringRules.score(scored, a.getJob().getScoringSettings(), questionFlags, tabs);
+        ScoringRules.Result r = ScoringRules.score(scored, a.getJob().getScoringSettings(), questionFlags, tabs,
+                proctoring.concern(a.getId()));
 
         a.setTheoryScore(r.theory());
         a.setHandsOnScore(r.handsOn());

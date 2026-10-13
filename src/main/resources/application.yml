@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8000}
   shutdown: graceful
 
+# No secret has a built-in default: production passes real environment variables,
+# local development (profile dev) reads a git-ignored .env, see application-dev.yml.
 spring:
   application:
     name: backend-classic
@@ -10,7 +12,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:15433/smartstaff_classic}
     username: ${DB_USERNAME:smartstaff_classic}
-    password: ${POSTGRES_PASSWORD:smartstaff_classic_dev}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -21,6 +23,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
   servlet:
     multipart:
       max-file-size: 25MB
@@ -28,7 +32,7 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:dev-only-secret-change-me-please-32bytes-min}
+    secret: ${APP_JWT_SECRET}
     ttl-minutes: ${JWT_TTL_MINUTES:1440}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
@@ -37,9 +41,13 @@ app:
   jobs:
     max-retained: 100
   encryption:
-    key: ${APP_ENCRYPTION_KEY:dev-only-encryption-key-change-me}
+    # Encrypts secrets saved in Settings (Gemini key, SMTP and Twilio passwords).
+    # Changing it means re-entering those secrets.
+    key: ${SETTINGS_ENCRYPTION_KEY}
   # External APIs — configurable so tests (and local demos) can point at a stub.
   gemini:
+    # Optional: overrides the key saved in Settings.
+    api-key: ${GEMINI_API_KEY:}
     base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
     # Starting values only: admins choose the models in Settings → AI provider at
     # runtime. No model name is built in — Google retires models.
@@ -50,6 +58,15 @@ app:
     # Also editable in Settings → AI provider.
     daily-call-cap: ${AI_DAILY_CALL_CAP:2000}
     retry-base-ms: ${AI_RETRY_BASE_MS:1000}
+  smtp:
+    # Optional: overrides the SMTP password saved in Settings.
+    password: ${SMTP_PASSWORD:}
+  # First admin for a fresh database: created once, only when no admin exists,
+  # and must change the password at first login.
+  bootstrap-admin:
+    email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    name: ${BOOTSTRAP_ADMIN_NAME:Administrator}
   twilio:
     api-base-url: ${TWILIO_API_BASE_URL:https://api.twilio.com}
   # In-memory, per-IP, per-minute limits on the unauthenticated endpoints

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Reads "Authorization: Bearer <token>", resolves it to a User, and — while
@@ -27,6 +28,13 @@ import java.util.UUID;
  *  endpoint. */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
+
+    /** The only calls allowed until a must_change_password account has changed it. */
+    static final Set<String> ALLOWED_BEFORE_PASSWORD_CHANGE =
+            Set.of("/api/auth/me", "/api/auth/change_password", "/api/auth/logout");
+    private static final String PASSWORD_CHANGE_REQUIRED = "{\"ok\":false,"
+            + "\"message\":\"Change your password before using the app.\",\"code\":\"PASSWORD_CHANGE_REQUIRED\","
+            + "\"detail\":\"Change your password before using the app.\"}";
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -55,6 +63,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 });
             }
+        }
+        if (SecurityContextHolder.getContext().getAuthentication() != null
+                && SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof User user
+                && user.isMustChangePassword()
+                && !ALLOWED_BEFORE_PASSWORD_CHANGE.contains(request.getRequestURI())) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json");
+            response.setCharacterEncoding("UTF-8");
+            response.getWriter().write(PASSWORD_CHANGE_REQUIRED);
+            return;
         }
         filterChain.doFilter(request, response);
     }

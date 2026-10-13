@@ -1,7 +1,7 @@
 # Viztalent AI backend — Feature status: is it complete?
 
 Last checked: **2026-09-24** · Covers `smartstaff/backend-classic` (the backend that serves `smartstaff/frontend`).
-For technical details of each feature see [FEATURES.md](FEATURES.md); for the code layout see [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md); for who can do what and the step-by-step flow from admin to candidate see [ROLES_AND_WORKFLOW.md](ROLES_AND_WORKFLOW.md).
+For technical details of each feature see [FEATURES.md](FEATURES.md); for the code layout see [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md); for who can do what and the step-by-step flow from admin to candidate see [ROLES_AND_WORKFLOW.md](ROLES_AND_WORKFLOW.md); for the assessment architecture review and roadmap see [ASSESSMENT_ARCHITECTURE.md](ASSESSMENT_ARCHITECTURE.md).
 
 ---
 

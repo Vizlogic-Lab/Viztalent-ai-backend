@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component;
  *  already advertise, so a fresh database is usable immediately. Idempotent —
  *  only inserts what's missing.
  *
- *  Only runs when NOT in the "prod" profile (@Profile("!prod")).
+ *  Only runs under the "dev" profile (@Profile("dev")): never in tests or production.
  *  Demo data must never exist in production. */
 @Component
-@Profile("!prod")
+@Profile("dev")
 public class DemoDataSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;

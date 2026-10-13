@@ -73,6 +73,8 @@ public abstract class IntegrationTestBase {
 
     /** The model tests run against (Settings can override it per test). */
     protected static final String TEST_MODEL = "test-model";
+    private static final String TEST_JWT_SECRET = java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID();
+    private static final String TEST_ENCRYPTION_KEY = java.util.UUID.randomUUID().toString();
 
     @DynamicPropertySource
     static void dynamicProperties(DynamicPropertyRegistry registry) {
@@ -81,6 +83,9 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.gemini.base-url", STUB::baseUrl);
         registry.add("app.gemini.model", () -> TEST_MODEL);
+        // No secret has a built-in default any more: tests get fresh random ones.
+        registry.add("app.jwt.secret", () -> TEST_JWT_SECRET);
+        registry.add("app.encryption.key", () -> TEST_ENCRYPTION_KEY);
         registry.add("app.ai.retry-base-ms", () -> "1");
         registry.add("app.twilio.api-base-url", STUB::baseUrl);
         registry.add("app.storage.dir", STORAGE_DIR::toString);

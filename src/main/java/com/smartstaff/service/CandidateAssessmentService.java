@@ -35,4 +35,7 @@ public interface CandidateAssessmentService {
 
     /** Scheduler: submit every in-progress attempt whose deadline has passed. */
     int autoSubmitOverdue();
+
+    /** The checks this test uses, for the consent screen; never starts the clock. */
+    com.smartstaff.proctoring.CandidateProctoringView proctoring(String token);
 }

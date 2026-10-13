@@ -1,5 +1,10 @@
 package com.smartstaff.service.impl;
 
+import com.smartstaff.proctoring.CandidateProctoringView;
+import com.smartstaff.proctoring.EventRateLimiter;
+import com.smartstaff.proctoring.ProctoringService;
+import com.smartstaff.proctoring.ProctoringSettingsService;
+import com.smartstaff.util.ProctoringRules;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstaff.dto.request.AssessmentAnswerInput;
@@ -65,6 +70,9 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
     private final ObjectMapper json;
     private final TransactionTemplate tx;
     private final int runLimit;
+    private final ProctoringService proctoring;
+    private final ProctoringSettingsService proctoringSettings;
+    private final EventRateLimiter eventLimiter;
 
     public CandidateAssessmentServiceImpl(InviteRepository inviteRepository,
                                           AssessmentAttemptRepository attemptRepository,
@@ -78,8 +86,12 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                                           ObjectMapper json,
                                           PlatformTransactionManager transactionManager,
                                           @Value("${app.assessment.run-limit-per-question:20}") int runLimit,
-            ActivityRecorder activity) {
+            ActivityRecorder activity, ProctoringService proctoring, ProctoringSettingsService proctoringSettings,
+            EventRateLimiter eventLimiter) {
         this.activity = activity;
+        this.proctoring = proctoring;
+        this.proctoringSettings = proctoringSettings;
+        this.eventLimiter = eventLimiter;
         this.inviteRepository = inviteRepository;
         this.attemptRepository = attemptRepository;
         this.answerRepository = answerRepository;
@@ -259,11 +271,18 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
         AssessmentAttempt a = attempts.stream().filter(x -> x.getStatus() == AttemptStatus.IN_PROGRESS).findFirst()
                 .orElseGet(() -> attempts.isEmpty() ? null : attempts.get(attempts.size() - 1));
         if (a == null) throw notStarted();
-        if (req == null || req.events() == null) return new AttemptEventsResponse(true, 0, 0);
+        if (req == null || req.events() == null) {
+            return new AttemptEventsResponse(true, 0, 0, proctoring.warnings(a.getId()));
+        }
 
+        // The server owns the warning count: client WARNING/TERMINATED rows are refused,
+        // exact repeats are dropped, and each attempt is rate-limited, so a client can
+        // neither flood nor reset the record.
         long existing = eventRepository.countByAttemptId(a.getId());
+        List<AttemptEvent> recent = eventRepository.findByAttemptIdOrderByAtAsc(a.getId());
         int stored = 0, dropped = 0;
         Instant now = Instant.now();
+        Instant earliest = a.getStartedAt() == null ? now : a.getStartedAt();
         for (AttemptEventsRequest.Event e : req.events()) {
             AttemptEventType type;
             try {
@@ -272,7 +291,9 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 dropped++;
                 continue;
             }
-            if (existing + stored >= EVENT_CAP) {
+            Instant at = e.at() == null || e.at().isAfter(now.plusSeconds(60)) || e.at().isBefore(earliest) ? now : e.at();
+            if (ProctoringRules.SERVER_ONLY.contains(type) || existing + stored >= EVENT_CAP
+                    || isRepeat(recent, type, at) || !eventLimiter.tryAcquire(a.getId())) {
                 dropped++;
                 continue;
             }
@@ -280,11 +301,32 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
             ev.setAttempt(a);
             ev.setType(type);
             ev.setPayload(safePayload(e.payload()));
-            ev.setAt(e.at() != null && !e.at().isAfter(now.plusSeconds(60)) ? e.at() : now);
+            ev.setAt(at);
             eventRepository.save(ev);
+            recent.add(ev);
             stored++;
         }
-        return new AttemptEventsResponse(true, stored, dropped);
+        return new AttemptEventsResponse(true, stored, dropped, proctoring.warnings(a.getId()));
+    }
+
+    /** The same signal within a second of one already stored (a resend or a double-fire). */
+    private static boolean isRepeat(List<AttemptEvent> stored, AttemptEventType type, Instant at) {
+        for (int i = stored.size() - 1; i >= 0; i--) {
+            AttemptEvent prev = stored.get(i);
+            if (prev.getType() == type && Math.abs(Duration.between(prev.getAt(), at).toMillis()) < 1000) return true;
+        }
+        return false;
+    }
+
+    /** No-clock view for the consent screen: which checks are on for this test. */
+    @Override
+    @Transactional(readOnly = true)
+    public CandidateProctoringView proctoring(String token) {
+        Invite invite = resolveInvite(token);
+        if (invite.getExpiresAt().isBefore(Instant.now()) && attemptsOf(invite).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, EXPIRED, "link_expired");
+        }
+        return new CandidateProctoringView(true, proctoringSettings.current());
     }
 
     /** Facts only: numbers, booleans and short strings, at most 10 keys —
@@ -451,7 +493,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 Math.max(0, Duration.between(now, a.getDeadlineAt()).getSeconds()),
                 null, false, runLimit, null,
                 questions.stream().map(assessmentMapper::toCandidateView).toList(),
-                savedAnswers(a));
+                savedAnswers(a), proctoring.warnings(a.getId()));
     }
 
     private CandidateAssessmentResponse submittedView(Invite invite, AssessmentAttempt a, List<AssessmentAttempt> attempts) {
@@ -470,7 +512,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 a.getLevel(), next, levelStatuses(invite, attempts), a.getId().toString(),
                 questions.size(), questions.stream().mapToInt(AssessmentQuestion::getPoints).sum(),
                 a.getStartedAt(), a.getDeadlineAt(), a.getDeadlineAt(), Instant.now(), 0,
-                a.getSubmittedAt(), a.isAutoSubmitted(), null, message, null, savedAnswers(a));
+                a.getSubmittedAt(), a.isAutoSubmitted(), null, message, null, savedAnswers(a), proctoring.warnings(a.getId()));
     }
 
     private static List<CandidateAssessmentResponse.LevelStatus> levelStatuses(Invite invite, List<AssessmentAttempt> attempts) {
