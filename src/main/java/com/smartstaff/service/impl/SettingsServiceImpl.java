@@ -49,6 +49,9 @@ public class SettingsServiceImpl implements SettingsService {
     private final CryptoService crypto;
     /** GEMINI_API_KEY from the server environment; overrides the saved key. Null when unset. */
     private final String envGeminiKey;
+    /** PUBLIC_BASE_URL from the server environment; used when nothing is saved in Settings. Null when unset. */
+    private final String envPublicBaseUrl;
+    private static final String LOCAL_PUBLIC_BASE_URL = "http://localhost:8000";
     private final ObjectMapper objectMapper;
     private final GeminiClient geminiClient;
     private final TwilioClient twilioClient;
@@ -59,8 +62,11 @@ public class SettingsServiceImpl implements SettingsService {
 
     public SettingsServiceImpl(AppSettingRepository settings, CryptoService crypto, ObjectMapper objectMapper,
                                 GeminiClient geminiClient, TwilioClient twilioClient,
-                                @Value("${app.gemini.api-key:}") String envGeminiKey) {
+                                @Value("${app.gemini.api-key:}") String envGeminiKey,
+                                @Value("${app.public-base-url:}") String envPublicBaseUrl) {
         this.envGeminiKey = envGeminiKey == null || envGeminiKey.isBlank() ? null : envGeminiKey.strip();
+        this.envPublicBaseUrl = envPublicBaseUrl == null || envPublicBaseUrl.isBlank()
+                ? null : envPublicBaseUrl.strip().replaceAll("/+$", "");
         this.settings = settings;
         this.crypto = crypto;
         this.objectMapper = objectMapper;
@@ -81,7 +87,7 @@ public class SettingsServiceImpl implements SettingsService {
         boolean hasGeminiKey = geminiKey != null && !geminiKey.isBlank();
         String keySource = !hasGeminiKey ? null : envGeminiKey != null ? "environment" : "settings";
 
-        String publicUrl = plain(KEY_PUBLIC_BASE_URL).orElse("http://localhost:8000");
+        String publicUrl = getPublicBaseUrl();
         boolean isLocalhost = publicUrl.contains("localhost") || publicUrl.contains("127.0.0.1") || publicUrl.contains("0.0.0.0");
 
         String twilioSid = plain(KEY_TWILIO_SID).orElse(null);
@@ -225,7 +231,9 @@ public class SettingsServiceImpl implements SettingsService {
 
     @Override
     public String getPublicBaseUrl() {
-        return plain(KEY_PUBLIC_BASE_URL).orElse("http://localhost:8000");
+        // Saved in Settings > PUBLIC_BASE_URL (server env) > localhost (dev only).
+        return plain(KEY_PUBLIC_BASE_URL).filter(s -> !s.isBlank())
+                .orElse(envPublicBaseUrl != null ? envPublicBaseUrl : LOCAL_PUBLIC_BASE_URL);
     }
 
     @Override

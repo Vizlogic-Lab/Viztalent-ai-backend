@@ -31,6 +31,9 @@ spring:
       max-request-size: 100MB
 
 app:
+  # Address candidates and Twilio reach this app at (assessment/interview links,
+  # webhooks), e.g. https://hire.example.com. A value saved in Settings wins.
+  public-base-url: ${PUBLIC_BASE_URL:}
   jwt:
     secret: ${APP_JWT_SECRET}
     ttl-minutes: ${JWT_TTL_MINUTES:1440}
