@@ -171,6 +171,7 @@ DB_PASSWORD=<DB_PASSWORD>
 APP_JWT_SECRET=<APP_JWT_SECRET>
 SETTINGS_ENCRYPTION_KEY=<SETTINGS_ENCRYPTION_KEY>
 CORS_ORIGINS=https://viztalent.example.com
+PUBLIC_BASE_URL=https://viztalent.example.com
 RATE_LIMIT_TRUST_FORWARDED_FOR=true
 BOOTSTRAP_ADMIN_EMAIL=<your admin email>
 BOOTSTRAP_ADMIN_PASSWORD=<temporary admin password>
@@ -181,6 +182,9 @@ Already built into the image — **do not add**: `SPRING_PROFILES_ACTIVE=prod`,
 `STORAGE_DIR=/app/storage`.
 
 Why the important ones matter:
+- `PUBLIC_BASE_URL` — the address put in candidate assessment/interview links and Twilio
+  callbacks. Without it (and with nothing saved in Settings) links point to `localhost` and
+  candidates can't open them.
 - `RATE_LIMIT_TRUST_FORWARDED_FOR=true` — behind Traefik every request arrives from the
   same internal IP. Without it, **the whole company shares 10 login attempts per minute**.
 - `BOOTSTRAP_ADMIN_*` — production has **no demo accounts**. These create the first
