@@ -1,5 +1,7 @@
 # Go-Live Checklist — Viztalent AI on Dokploy
 
+> **Superseded by [DEPLOYMENT_HOSTINGER_DOKPLOY.md](DEPLOYMENT_HOSTINGER_DOKPLOY.md)** — the complete final deployment guide (includes the code runner, backups and troubleshooting).
+
 Server: Hostinger VPS `200.234.34.13`, Dokploy panel on `:3000`.
 Repos: `Vizlogic-Lab/Viztalent-ai-backend` and `Vizlogic-Lab/Viztalent-ai-frontend`.
 
