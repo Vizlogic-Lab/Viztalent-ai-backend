@@ -36,11 +36,22 @@ public class JwtService {
         this.ttlMinutes = ttlMinutes;
     }
 
+    /** Claim holding the account's token version (see V30__token_version.sql). */
+    static final String TOKEN_VERSION_CLAIM = "tv";
+
+    /** A token whose signature and expiry checked out. */
+    public record VerifiedToken(UUID userId, int tokenVersion) {}
+
     public String issueToken(UUID userId, String role) {
+        return issueToken(userId, role, 0);
+    }
+
+    public String issueToken(UUID userId, String role, int tokenVersion) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("role", role)
+                .claim(TOKEN_VERSION_CLAIM, tokenVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttlMinutes, ChronoUnit.MINUTES)))
                 .signWith(key)
@@ -48,10 +59,16 @@ public class JwtService {
     }
 
     public Optional<UUID> validateAndGetUserId(String token) {
+        return verify(token).map(VerifiedToken::userId);
+    }
+
+    /** Signature + expiry check; a token without a version claim counts as version 0. */
+    public Optional<VerifiedToken> verify(String token) {
         try {
             Claims claims = Jwts.parser().verifyWith(key).build()
                     .parseSignedClaims(token).getPayload();
-            return Optional.of(UUID.fromString(claims.getSubject()));
+            Integer version = claims.get(TOKEN_VERSION_CLAIM, Integer.class);
+            return Optional.of(new VerifiedToken(UUID.fromString(claims.getSubject()), version == null ? 0 : version));
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }

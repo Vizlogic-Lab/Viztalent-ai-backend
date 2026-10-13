@@ -67,6 +67,10 @@ public class User {
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword;
 
+    /** Bumped on password change; tokens carrying an older version are rejected. */
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     public User(Role role, String name, String email, String employeeId, String passwordHash, AccountStatus status) {
         this.role = role;
         this.name = name;

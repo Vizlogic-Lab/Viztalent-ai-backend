@@ -138,6 +138,11 @@ public abstract class IntegrationTestBase {
         return new Account(user, jwtService.issueToken(user.getId(), user.getRole().name()));
     }
 
+    /** The same account with a specific token (e.g. one returned by login or change_password). */
+    protected Account withToken(User user, String token) {
+        return new Account(user, token);
+    }
+
     private Account account(User user) {
         User saved = users.save(user);
         return new Account(saved, jwtService.issueToken(saved.getId(), saved.getRole().name()));

@@ -23,5 +23,7 @@ public interface AuthService {
      *  Validates password policy: 10+ chars, 1 letter, 1 digit.
      *  @throws com.smartstaff.exception.ApiException if current password is wrong or new password violates policy
      */
-    void changePassword(User user, String currentPassword, String newPassword);
+    /** Changes the password, signs the account out of every other session, and
+     *  returns a fresh token for the caller so this session stays signed in. */
+    String changePassword(User user, String currentPassword, String newPassword);
 }

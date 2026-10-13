@@ -33,11 +33,51 @@ class L1SecretsIntegrationTest extends IntegrationTestBase {
         // The same password again is refused; a new one clears the flag.
         postJsonAs(admin, "/api/auth/change_password", Map.of("current", "Passw0rd!", "new_password", "Passw0rd!"))
                 .andExpect(status().isBadRequest());
-        postJsonAs(admin, "/api/auth/change_password", Map.of("current", "Passw0rd!", "new_password", "Brand-New-Pass-2026"))
-                .andExpect(status().isOk());
+        JsonNode changed = bodyOf(postJsonAs(admin, "/api/auth/change_password",
+                Map.of("current", "Passw0rd!", "new_password", "Brand-New-Pass-2026")).andExpect(status().isOk()));
         assertThat(jdbc.queryForObject("select must_change_password from users where id = ?", Boolean.class, admin.user().getId()))
                 .isFalse();
-        getAs(admin, "/api/config").andExpect(status().isOk());
+        // The change returns a fresh token (the old one is signed out — see passwordChangeSignsOutEverywhere).
+        getAs(withToken(admin.user(), changed.path("token").asText()), "/api/config").andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("changing the password signs every other session out; the returned token keeps this one signed in")
+    void passwordChangeSignsOutEverywhere() throws Exception {
+        Account laptop = newAdmin();
+        String email = laptop.user().getEmail();
+        Account phone = withToken(laptop.user(), loginToken(email, "Passw0rd!"));
+        getAs(phone, "/api/auth/me").andExpect(status().isOk());
+
+        JsonNode changed = bodyOf(postJsonAs(laptop, "/api/auth/change_password",
+                Map.of("current", "Passw0rd!", "new_password", "Brand-New-Pass-2026")).andExpect(status().isOk()));
+        Account laptopNow = withToken(laptop.user(), changed.path("token").asText());
+
+        // Both earlier tokens (this device's old one and the other device's) are rejected...
+        getAs(laptop, "/api/auth/me").andExpect(status().isUnauthorized());
+        getAs(phone, "/api/auth/me").andExpect(status().isUnauthorized());
+        // ...the returned token works, and so does a fresh login with the new password.
+        getAs(laptopNow, "/api/auth/me").andExpect(status().isOk());
+        getAs(withToken(laptop.user(), loginToken(email, "Brand-New-Pass-2026")), "/api/auth/me").andExpect(status().isOk());
+        postJson("/api/auth/login", Map.of("role", "admin", "identifier", email, "password", "Passw0rd!"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("a wrong current password changes nothing and signs nobody out")
+    void wrongCurrentPasswordChangesNothing() throws Exception {
+        Account admin = newAdmin();
+        postJsonAs(admin, "/api/auth/change_password", Map.of("current", "not-my-password-1", "new_password", "Brand-New-Pass-2026"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("wrong_password"));
+        getAs(admin, "/api/auth/me").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select token_version from users where id = ?", Integer.class, admin.user().getId()))
+                .isZero();
+    }
+
+    private String loginToken(String email, String password) throws Exception {
+        return bodyOf(postJson("/api/auth/login", Map.of("role", "admin", "identifier", email, "password", password))
+                .andExpect(status().isOk())).path("token").asText();
     }
 
     @Test

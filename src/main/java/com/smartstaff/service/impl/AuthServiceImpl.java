@@ -70,7 +70,7 @@ public class AuthServiceImpl implements AuthService {
         user.setLastSeenAt(now);
         userRepository.save(user);
 
-        String token = jwtService.issueToken(user.getId(), role.name());
+        String token = jwtService.issueToken(user.getId(), role.name(), user.getTokenVersion());
         return AuthResponse.success(token, userMapper.toAccountResponse(user));
     }
 
@@ -173,7 +173,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void changePassword(User user, String currentPassword, String newPassword) {
+    public String changePassword(User user, String currentPassword, String newPassword) {
         // 400, not 401: a 401 would make the frontend treat the session as logged out.
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.", "wrong_password");
@@ -185,7 +185,9 @@ public class AuthServiceImpl implements AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);   // the bootstrap admin is now free to use the app
+        user.setTokenVersion(user.getTokenVersion() + 1);   // signs out every other session
         userRepository.save(user);
+        return jwtService.issueToken(user.getId(), user.getRole().name(), user.getTokenVersion());
     }
 
     private static void validatePasswordPolicy(String password) {

@@ -6,6 +6,7 @@ import com.smartstaff.dto.request.LoginRequest;
 import com.smartstaff.dto.request.SignupRequest;
 import com.smartstaff.dto.response.AccountsResponse;
 import com.smartstaff.dto.response.AuthResponse;
+import com.smartstaff.dto.response.ChangePasswordResponse;
 import com.smartstaff.dto.response.MeResponse;
 import com.smartstaff.dto.response.SimpleResponse;
 import com.smartstaff.entity.Role;
@@ -67,10 +68,10 @@ public class AuthController {
 
     @PostMapping("/change_password")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SimpleResponse> changePassword(
+    public ResponseEntity<ChangePasswordResponse> changePassword(
             @Valid @RequestBody ChangePasswordRequest req,
             @AuthenticationPrincipal User user) {
-        authService.changePassword(user, req.current(), req.new_password());
-        return ResponseEntity.ok(SimpleResponse.OK);
+        String token = authService.changePassword(user, req.current(), req.new_password());
+        return ResponseEntity.ok(new ChangePasswordResponse(true, token));
     }
 }

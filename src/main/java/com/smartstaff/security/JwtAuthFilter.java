@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 /** Reads "Authorization: Bearer <token>", resolves it to a User, and — while
  *  we're already touching the row — bumps last_seen_at so the Employees
@@ -53,15 +52,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
-            Optional<UUID> userId = jwtService.validateAndGetUserId(token);
-            if (userId.isPresent() && SecurityContextHolder.getContext().getAuthentication() == null) {
-                userRepository.findById(userId.get()).filter(JwtAuthFilter::isActive).ifPresent(user -> {
-                    user.setLastSeenAt(Instant.now());
-                    userRepository.save(user);
-                    var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
-                    var auth = new UsernamePasswordAuthenticationToken(user, null, authorities);
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                });
+            Optional<JwtService.VerifiedToken> verified = jwtService.verify(token);
+            if (verified.isPresent() && SecurityContextHolder.getContext().getAuthentication() == null) {
+                int tokenVersion = verified.get().tokenVersion();
+                userRepository.findById(verified.get().userId())
+                        .filter(JwtAuthFilter::isActive)
+                        // A password change bumps the version: older tokens are signed out.
+                        .filter(user -> user.getTokenVersion() == tokenVersion)
+                        .ifPresent(user -> {
+                            user.setLastSeenAt(Instant.now());
+                            userRepository.save(user);
+                            var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
+                            var auth = new UsernamePasswordAuthenticationToken(user, null, authorities);
+                            SecurityContextHolder.getContext().setAuthentication(auth);
+                        });
             }
         }
         if (SecurityContextHolder.getContext().getAuthentication() != null
