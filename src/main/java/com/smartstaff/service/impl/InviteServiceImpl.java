@@ -93,11 +93,14 @@ public class InviteServiceImpl implements InviteService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "candidate_email is required.");
         }
 
-        // A screened candidate with a readable resume gets a personal assessment
-        // (written from the JD + resume on first invite, then reused). It has one
-        // level, so the requested levels collapse to it. Anyone else gets the job's
-        // current READY version, as before.
-        Candidate candidate = candidateRepository.findFirstByJobIdAndEmailIgnoreCase(jobId, req.candidate_email().trim())
+        // A screened candidate with a readable resume gets a personal assessment for
+        // Level 1 (written from the JD + resume on first invite, then reused). It only
+        // has Level 1, so a request for Level 2, Level 3 or several levels uses the
+        // job's current READY version instead — it never turns into a Level 1 link.
+        boolean levelOneOnly = !req.combined() && levels.size() == 1
+                && PersonalAssessmentGenerator.LEVEL.equals(levels.get(0));
+        Candidate candidate = !levelOneOnly ? null
+                : candidateRepository.findFirstByJobIdAndEmailIgnoreCase(jobId, req.candidate_email().trim())
                 .filter(c -> c.getResume() != null && c.getResume().getExtractedText() != null
                         && !c.getResume().getExtractedText().isBlank())
                 .orElse(null);
@@ -108,9 +111,6 @@ public class InviteServiceImpl implements InviteService {
             try {
                 UUID id = personalAssessments.readyFor(candidate.getId());
                 assessment = assessmentRepository.findById(id).orElseThrow();
-                levels = List.of(PersonalAssessmentGenerator.LEVEL);
-                req = new InviteMintRequest(req.session_id(), req.candidate_email(), req.candidate_name(), levels, false,
-                        req.send_email());
             } catch (ApiException e) {
                 if (!isAiFailure(e)) throw e;
                 assessment = sharedReadyAssessment(jobId).orElseThrow(() -> e);
