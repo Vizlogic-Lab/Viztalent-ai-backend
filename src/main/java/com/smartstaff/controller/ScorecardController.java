@@ -1,6 +1,7 @@
 package com.smartstaff.controller;
 
 import com.smartstaff.service.AssessmentService;
+import com.smartstaff.service.impl.AttemptReportService;
 import com.smartstaff.service.ScorecardPdfService.ScorecardPdf;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -24,15 +25,28 @@ import java.util.UUID;
 public class ScorecardController {
 
     private final AssessmentService assessmentService;
+    private final AttemptReportService reportService;
 
-    public ScorecardController(AssessmentService assessmentService) {
+    public ScorecardController(AssessmentService assessmentService, AttemptReportService reportService) {
         this.assessmentService = assessmentService;
+        this.reportService = reportService;
     }
 
     @GetMapping("/api/scorecard/{jobId}/{ref}")
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
     public ResponseEntity<byte[]> scorecardPdf(@PathVariable UUID jobId, @PathVariable String ref) {
-        ScorecardPdf pdf = assessmentService.scorecardPdf(jobId, ref);
+        return pdf(assessmentService.scorecardPdf(jobId, ref));
+    }
+
+    /** HR's full report for one attempt: candidate, resume, every question with the answer given and the
+     *  correct one. Contains the answer key, so it is signed-download + job access only, like the scorecard. */
+    @GetMapping("/api/fullreport/{jobId}/{attemptId}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<byte[]> fullReport(@PathVariable UUID jobId, @PathVariable UUID attemptId) {
+        return pdf(reportService.report(jobId, attemptId));
+    }
+
+    private static ResponseEntity<byte[]> pdf(ScorecardPdf pdf) {
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(pdf.filename(), StandardCharsets.UTF_8).build();
         return ResponseEntity.ok()

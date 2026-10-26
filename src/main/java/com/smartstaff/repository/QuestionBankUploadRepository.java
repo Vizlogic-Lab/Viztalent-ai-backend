@@ -4,9 +4,12 @@ import com.smartstaff.entity.QuestionBankUpload;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface QuestionBankUploadRepository extends JpaRepository<QuestionBankUpload, UUID> {
 
     List<QuestionBankUpload> findAllByOrderByCreatedAtAsc();
+
+    Optional<QuestionBankUpload> findFirstByFilename(String filename);
 }

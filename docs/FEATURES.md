@@ -307,6 +307,31 @@ merging into the existing one.
   per the design doc's "store invite token hashes, not raw tokens." TTL comes from
   `Settings → Invite link expiry` (`SettingsService.getInviteTtlSeconds()`, default 48h).
   See the deviation below re: token "coalescing".
+- **AI questions saved to the question bank** — after a generated question passes
+  validation, `QuestionBankHarvester` copies it with its answer into `question_bank_items`
+  (`source = AI_GENERATED`, under the upload "AI-generated questions (auto)"), so later
+  assessments reuse it without a Gemini call. Skipped: SCENARIO questions, questions Gemini
+  tags `PROJECT_SPECIFIC` (anything not clearly `GENERIC`), bank-sourced questions, and
+  duplicates (`content_hash`, unique index). A harvest failure never fails generation.
+  Flyway V31.
+- **Shared batch link** — `GET/POST /api/jobs/{jobId}/batch` (HR) makes ONE link for the
+  job's screened candidates: a roster snapshot with each fit score and a minimum score
+  (default 50) for who may enter. It reuses the job's current READY assessment and never
+  generates one. Asking again returns the same open link; `force_new` replaces it.
+  Candidates open `/batch/{jd}?token=…` and call the public, rate-limited
+  `/api/candidate/batch/{token}` (`GET` info, `POST /enter {email, name}`). No email is sent
+  (no SMTP needed): the email and the full name from the resume must both match a roster
+  entry that cleared the minimum. The name is compared as a set of words, ignoring case,
+  accents, punctuation and order. A match mints a normal per-candidate invite, so the usual
+  assessment flow runs; re-entering swaps the token on the same invite. Every refusal is
+  identical (`not_on_list`), so the link can't reveal who was screened, and the roster row is
+  locked so parallel requests can't mint two invites. Trade-off: anyone who knows a listed
+  candidate's email and name can enter as them. Flyway V32 (`screening_batches`,
+  `batch_candidates`) and V33 (drops the earlier email-code columns).
+- **Full report PDF** — `GET /api/fullreport/{jobId}/{attemptId}` (signed download, job
+  access): candidate, scores, resume text (first 2,200 characters), then every question with
+  the candidate's answer, the correct answer and the score (code capped at 30 lines). It
+  contains the answer key, so it is HR-only. Button "Full report PDF" on the attempt review page.
 
 ### Interviews (`/api/interview/**`)
 

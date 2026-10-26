@@ -79,7 +79,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/signup").permitAll()
                         .requestMatchers("/api/interview/by_token/**", "/api/interview/save_by_token/**").permitAll()
                         // Candidate assessment-taking flow (the invite token is the credential).
-                        .requestMatchers("/api/candidate/assessment/**").permitAll()
+                        .requestMatchers("/api/candidate/assessment/**", "/api/candidate/batch/**").permitAll()
                         .requestMatchers("/api/assessment/by_token/**", "/api/assessment/save_by_token/**",
                                 "/api/assessment/submit_by_token/**", "/api/assessment/run_by_token/**").permitAll()
                         // Public: Twilio's own webhooks (no bearer token — Twilio can't send
@@ -89,7 +89,7 @@ public class SecurityConfig {
                         // Downloads need either a bearer token or a signed URL (see
                         // DownloadSignatureFilter, which authenticates signed requests
                         // as the user who signed them). POST /api/downloads/sign issues them.
-                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**").hasAnyRole("ADMIN", "USER")
+                        .requestMatchers(HttpMethod.GET, "/api/jd/*/download", "/api/resumes/**", "/api/download_report", "/api/scorecard/**", "/api/fullreport/**").hasAnyRole("ADMIN", "USER")
                         // Admin-only areas are decided here, in the filter chain, so a non-admin is
                         // refused (403) before the request body is even parsed or validated — without
                         // this, an employee sending an invalid body got a 400 instead. The

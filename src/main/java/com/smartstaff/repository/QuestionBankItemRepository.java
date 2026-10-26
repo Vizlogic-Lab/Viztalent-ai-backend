@@ -12,6 +12,8 @@ public interface QuestionBankItemRepository extends JpaRepository<QuestionBankIt
 
     long countByType(String type);
 
+    boolean existsByContentHash(String contentHash);
+
     long countByLevel(String level);
 
     /** Items tagged for this level, plus level-agnostic items (level IS NULL) —

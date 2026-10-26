@@ -106,6 +106,8 @@ public class QuestionDrafter {
         }
         sb.append("Job description excerpt:\n").append(jd).append("\n\n")
                 .append(instructions(slot)).append('\n')
+                .append("Set \"scope\" to PROJECT_SPECIFIC if the question depends on this job's project, product, company or "
+                        + "internal details; set GENERIC if any candidate with the skill could answer it without that context.\n")
                 .append("Avoid well-known puzzles and textbook trivia; use situations from this role. No placeholders.\n");
         if (previousFailure != null) {
             sb.append("\nYour previous attempt was rejected: ").append(previousFailure).append(" Fix exactly this.\n");
@@ -162,6 +164,7 @@ public class QuestionDrafter {
     static Map<String, Object> schema(QuestionType type) {
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("skill", str());
+        props.put("scope", Map.of("type", "STRING", "enum", List.of("GENERIC", "PROJECT_SPECIFIC")));
         switch (type) {
             case MCQ, MSQ -> {
                 props.put("question", str());
@@ -257,6 +260,8 @@ public class QuestionDrafter {
         q.setOrigin("AI");
         String skill = text(o, "skill");
         q.setSkill(skill == null ? slot.targetSkill() : skill.trim());
+        // Anything not clearly GENERIC is treated as project-specific, so it stays out of the bank.
+        q.setProjectSpecific(!"GENERIC".equalsIgnoreCase(text(o, "scope")));
         Map<String, String> naive = Map.of();
 
         switch (slot.type()) {

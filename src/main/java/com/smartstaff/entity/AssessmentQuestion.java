@@ -128,6 +128,10 @@ public class AssessmentQuestion {
 
     private boolean validated;
 
+    /** Set by the AI drafter when the question depends on this job's project or company; never stored. */
+    @Transient
+    private boolean projectSpecific;
+
     @Column(name = "validation_log", columnDefinition = "TEXT")
     private String validationLog;
 

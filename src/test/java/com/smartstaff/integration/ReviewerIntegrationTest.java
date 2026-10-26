@@ -158,7 +158,7 @@ class ReviewerIntegrationTest extends IntegrationTestBase {
                 .contains(pattern)) return true;
         if (method.equals("GET") && (pattern.equals("/api/assessment/submissions/{jobId}")
                 || pattern.equals("/api/assessment/attempts/{attemptId}"))) return true;
-        for (String pub : List.of("/api/candidate/assessment/", "/api/assessment/by_token/", "/api/assessment/save_by_token/",
+        for (String pub : List.of("/api/candidate/assessment/", "/api/candidate/batch/", "/api/assessment/by_token/", "/api/assessment/save_by_token/",
                 "/api/assessment/submit_by_token/", "/api/assessment/run_by_token/", "/api/interview/by_token/",
                 "/api/interview/save_by_token/", "/api/interview/twiml/")) {
             if (pattern.startsWith(pub)) return true;

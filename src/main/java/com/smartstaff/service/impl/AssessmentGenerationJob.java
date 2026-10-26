@@ -51,12 +51,13 @@ public class AssessmentGenerationJob {
     private final QuestionDrafter drafter;
     private final QuestionValidator validator;
     private final ReviewRouter reviewRouter;
+    private final QuestionBankHarvester harvester;
     private final TransactionTemplate tx;
 
     public AssessmentGenerationJob(AssessmentRepository assessments, AssessmentQuestionRepository questions,
                                    JobRepository jobs, JobRoleProfileRepository profiles, QuestionBankItemRepository bank,
                                    SettingsService settings, CodeRunnerService runner, QuestionDrafter drafter,
-                                   QuestionValidator validator, ReviewRouter reviewRouter,
+                                   QuestionValidator validator, ReviewRouter reviewRouter, QuestionBankHarvester harvester,
                                    PlatformTransactionManager transactionManager,
             ActivityRecorder activity) {
         this.activity = activity;
@@ -70,6 +71,7 @@ public class AssessmentGenerationJob {
         this.drafter = drafter;
         this.validator = validator;
         this.reviewRouter = reviewRouter;
+        this.harvester = harvester;
         this.tx = new TransactionTemplate(transactionManager);
         // REQUIRES_NEW: when run inline after the queuing commit, that finished
         // transaction is still bound to the thread and would swallow writes.
@@ -257,12 +259,14 @@ public class AssessmentGenerationJob {
         AssessmentQuestion q = draft.question();
         q.setValidated(true);
         q.setValidationLog("Regenerated (single question).\n" + String.join("\n", log));
-        return tx.execute(s -> {
+        UUID id = tx.execute(s -> {
             questions.findById(oldQuestionId).ifPresent(questions::delete);
             questions.flush();
             q.setAssessment(assessments.getReferenceById(assessmentId));
             return questions.save(q).getId();
         });
+        harvester.harvest(q, draft.naiveSolution());
+        return id;
     }
 
     private void fill(Run run, SlotWork w) {
@@ -432,6 +436,7 @@ public class AssessmentGenerationJob {
             questions.save(q);
             assessments.findById(run.assessmentId).ifPresent(a -> a.setProgress(progress));
         });
+        harvester.harvest(q, draft.naiveSolution());
     }
 
     private void unfilled(Run run, SlotWork w, String reason) {

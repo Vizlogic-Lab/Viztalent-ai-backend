@@ -120,7 +120,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 || ("GET".equals(method) && path.startsWith("/api/assessment/by_token/"))
                 || ("POST".equals(method) && (path.startsWith("/api/assessment/save_by_token/")
                         || path.startsWith("/api/assessment/submit_by_token/")))
-                || path.startsWith(CANDIDATE)) {
+                || path.startsWith(CANDIDATE) || path.startsWith("/api/candidate/batch/")) {
             return "token";
         }
         return null;

@@ -36,7 +36,8 @@ public class DownloadSignatureFilter extends OncePerRequestFilter {
             Pattern.compile("^/api/jd/[0-9a-fA-F-]{36}/download$"),
             Pattern.compile("^/api/resumes/[0-9a-fA-F-]{36}/download/[^/]+$"),
             Pattern.compile("^/api/download_report$"),
-            Pattern.compile("^/api/scorecard/[0-9a-fA-F-]{36}/[^/]+$")
+            Pattern.compile("^/api/scorecard/[0-9a-fA-F-]{36}/[^/]+$"),
+            Pattern.compile("^/api/fullreport/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}$")
     );
 
     private final DownloadSignatureService signatureService;

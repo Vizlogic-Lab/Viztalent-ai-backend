@@ -122,6 +122,14 @@ public class QuestionBankItem {
     @Column(name = "role_families", columnDefinition = "jsonb")
     private List<String> roleFamilies = new ArrayList<>();
 
+    /** UPLOAD (HR file) or AI_GENERATED (harvested after an assessment was generated). */
+    @Column(nullable = false, length = 16)
+    private String source = "UPLOAD";
+
+    /** SHA-256 of the normalized question content; set on AI-harvested items to avoid duplicates. */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
     private boolean validated;
 
     @Column(name = "validation_log", columnDefinition = "TEXT")
