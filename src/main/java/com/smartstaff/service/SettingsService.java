@@ -51,6 +51,11 @@ public interface SettingsService {
     /** Piston API base (e.g. http://piston:2000/api/v2), or null if not set. */
     String getPistonUrlOrNull();
 
+    /** Global pass marks per level (L1-L3); empty when none are set. */
+    java.util.Map<String, com.smartstaff.entity.LevelPassMarks> levelPassMarks();
+
+    void saveLevelPassMarks(java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks, com.smartstaff.entity.User admin);
+
     /** Calling-code prefixes place_call may dial, e.g. ["+91"] (setting twilio_allowed_country_codes). */
     java.util.List<String> getTwilioAllowedCountryCodes();
 }

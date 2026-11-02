@@ -32,6 +32,21 @@ public class SettingsController {
     }
 
 
+    @GetMapping("/api/config/level_pass_marks")
+    @PreAuthorize("hasRole('ADMIN')")
+    public java.util.Map<String, com.smartstaff.entity.LevelPassMarks> levelPassMarks() {
+        return settingsService.levelPassMarks();
+    }
+
+    @PutMapping("/api/config/level_pass_marks")
+    @PreAuthorize("hasRole('ADMIN')")
+    public java.util.Map<String, com.smartstaff.entity.LevelPassMarks> saveLevelPassMarks(
+            @RequestBody java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.smartstaff.entity.User admin) {
+        settingsService.saveLevelPassMarks(marks, admin);
+        return settingsService.levelPassMarks();
+    }
+
     @PostMapping("/api/config/public_url")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PublicUrlSaveResponse> savePublicUrl(@Valid @RequestBody PublicUrlRequest req, @AuthenticationPrincipal User admin) {

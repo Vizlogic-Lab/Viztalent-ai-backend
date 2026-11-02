@@ -8,6 +8,7 @@ import com.smartstaff.exception.ApiException;
 import com.smartstaff.mapper.AssessmentMapper;
 import com.smartstaff.repository.*;
 import com.smartstaff.service.AssessmentQuestionService;
+import com.smartstaff.util.PassMarkRules;
 import com.smartstaff.util.ResultNarrator;
 import com.smartstaff.util.ScoringRules;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,7 @@ public class ReviewService {
     private final ReviewAuditRepository audit;
     private final JobReviewerRepository jobReviewers;
     private final JobRepository jobs;
+    private final com.smartstaff.service.SettingsService settingsService;
     private final UserRepository users;
     private final AssessmentRepository assessments;
     private final AssessmentQuestionRepository questions;
@@ -68,7 +70,7 @@ public class ReviewService {
     private final ProctoringService proctoring;
 
     public ReviewService(SmeReviewRepository reviews, ReviewAuditRepository audit, JobReviewerRepository jobReviewers,
-                         JobRepository jobs, UserRepository users, AssessmentRepository assessments,
+                         JobRepository jobs, com.smartstaff.service.SettingsService settingsService, UserRepository users, AssessmentRepository assessments,
                          AssessmentQuestionRepository questions, AssessmentAttemptRepository attempts,
                          AssessmentAnswerRepository answers, AttemptEventRepository events,
                          JobRoleProfileRepository roleProfiles, AssessmentQuestionService questionService,
@@ -83,6 +85,7 @@ public class ReviewService {
         this.audit = audit;
         this.jobReviewers = jobReviewers;
         this.jobs = jobs;
+        this.settingsService = settingsService;
         this.users = users;
         this.assessments = assessments;
         this.questions = questions;
@@ -487,7 +490,8 @@ public class ReviewService {
             if (narrated.get(i).earned() < narrated.get(i).points() / 2.0) weak.add(lines.get(i));
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
-        ScoringRules.Result res = ScoringRules.score(scored, a.getJob().getScoringSettings(), gateFlags, tabs,
+        ScoringRules.Result res = ScoringRules.score(scored, PassMarkRules.effective(a.getJob().getScoringSettings(),
+                        settingsService.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel()), gateFlags, tabs,
                 proctoring.concern(a.getId()));
         a.setTheoryScore(res.theory());
         a.setHandsOnScore(res.handsOn());

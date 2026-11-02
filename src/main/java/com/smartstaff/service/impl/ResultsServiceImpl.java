@@ -200,6 +200,26 @@ public class ResultsServiceImpl implements ResultsService {
         return settings;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<String, com.smartstaff.entity.LevelPassMarks> levelPassMarks(UUID jobId) {
+        java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks = job(jobId).getLevelPassMarks();
+        return marks == null ? java.util.Map.of() : marks;
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String, com.smartstaff.entity.LevelPassMarks> updateLevelPassMarks(UUID jobId,
+            java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks) {
+        String problem = com.smartstaff.util.PassMarkRules.problem(marks);
+        if (problem != null) throw new ApiException(HttpStatus.BAD_REQUEST, problem, "invalid_pass_marks");
+        Job job = job(jobId);
+        // An empty map clears the override, so the job goes back to the global values.
+        job.setLevelPassMarks(marks == null || marks.isEmpty() ? null : marks);
+        jobs.save(job);
+        return marks == null ? java.util.Map.of() : marks;
+    }
+
     private Job job(UUID jobId) {
         return jobs.findById(jobId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Job not found."));
     }

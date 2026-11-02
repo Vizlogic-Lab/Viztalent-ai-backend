@@ -83,9 +83,12 @@ public final class ScoringRules {
         // A missing dimension doesn't block its gate.
         boolean handsOnPass = handsOn == null || h >= s.proceed_hands_on_min();
         boolean theoryPass = theory == null || t >= s.proceed_theory_min();
+        // Overall pass mark (0 = no overall gate). Only PROCEED needs it.
+        double o = overall == null ? 0 : overall.doubleValue();
+        boolean overallPass = overall == null || o >= s.overall_pass();
         String recommendation;
         if (overall == null || concern) recommendation = "HR_REVIEW";
-        else if (handsOnPass && theoryPass) recommendation = "PROCEED";
+        else if (handsOnPass && theoryPass && overallPass) recommendation = "PROCEED";
         else if (handsOn != null && h >= s.review_hands_on_min() && h < s.proceed_hands_on_min()) recommendation = "HR_REVIEW";
         else recommendation = "NOT_RECOMMENDED";
 

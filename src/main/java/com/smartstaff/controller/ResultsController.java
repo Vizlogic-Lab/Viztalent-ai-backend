@@ -46,6 +46,19 @@ public class ResultsController {
         return ResponseEntity.ok(results.scoringSettings(jobId));
     }
 
+    @GetMapping("/api/assessment/level_pass_marks/{jobId}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<java.util.Map<String, com.smartstaff.entity.LevelPassMarks>> levelPassMarks(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(results.levelPassMarks(jobId));
+    }
+
+    @PutMapping("/api/assessment/level_pass_marks/{jobId}")
+    @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<java.util.Map<String, com.smartstaff.entity.LevelPassMarks>> updateLevelPassMarks(
+            @PathVariable UUID jobId, @RequestBody java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks) {
+        return ResponseEntity.ok(results.updateLevelPassMarks(jobId, marks));
+    }
+
     @PutMapping("/api/assessment/scoring_settings/{jobId}")
     @PreAuthorize("@jobAccess.canAccessJob(#jobId, authentication)")
     public ResponseEntity<ScoringSettings> updateScoringSettings(@PathVariable UUID jobId,

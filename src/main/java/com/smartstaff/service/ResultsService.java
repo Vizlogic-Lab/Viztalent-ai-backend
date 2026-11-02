@@ -20,4 +20,10 @@ public interface ResultsService {
     ScoringSettings scoringSettings(UUID jobId);
 
     ScoringSettings updateScoringSettings(UUID jobId, ScoringSettings settings);
+
+    /** This job's pass-mark overrides by level; empty map = use the global values. */
+    java.util.Map<String, com.smartstaff.entity.LevelPassMarks> levelPassMarks(UUID jobId);
+
+    java.util.Map<String, com.smartstaff.entity.LevelPassMarks> updateLevelPassMarks(UUID jobId,
+            java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks);
 }

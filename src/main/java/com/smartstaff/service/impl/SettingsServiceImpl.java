@@ -33,6 +33,7 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String KEY_GEMINI_API_KEY = "gemini_api_key";
     private static final String KEY_PUBLIC_BASE_URL = "public_base_url";
     private static final String KEY_INVITE_TTL_SECONDS = "invite_ttl_seconds";
+    private static final String KEY_LEVEL_PASS_MARKS = "level_pass_marks";
     private static final String KEY_TWILIO_SID = "twilio_account_sid";
     private static final String KEY_TWILIO_TOKEN = "twilio_auth_token";
     private static final String KEY_TWILIO_FROM = "twilio_from_number";
@@ -234,6 +235,31 @@ public class SettingsServiceImpl implements SettingsService {
         // Saved in Settings > PUBLIC_BASE_URL (server env) > localhost (dev only).
         return plain(KEY_PUBLIC_BASE_URL).filter(s -> !s.isBlank())
                 .orElse(envPublicBaseUrl != null ? envPublicBaseUrl : LOCAL_PUBLIC_BASE_URL);
+    }
+
+    @Override
+    public java.util.Map<String, com.smartstaff.entity.LevelPassMarks> levelPassMarks() {
+        return plain(KEY_LEVEL_PASS_MARKS).map(this::readLevelPassMarks).orElseGet(java.util.Map::of);
+    }
+
+    @Override
+    public void saveLevelPassMarks(java.util.Map<String, com.smartstaff.entity.LevelPassMarks> marks, User admin) {
+        String problem = com.smartstaff.util.PassMarkRules.problem(marks);
+        if (problem != null) throw new ApiException(HttpStatus.BAD_REQUEST, problem, "invalid_pass_marks");
+        try {
+            put(KEY_LEVEL_PASS_MARKS, objectMapper.writeValueAsString(marks == null ? java.util.Map.of() : marks), admin);
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Pass marks could not be saved.", "invalid_pass_marks");
+        }
+    }
+
+    private java.util.Map<String, com.smartstaff.entity.LevelPassMarks> readLevelPassMarks(String json) {
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<
+                    java.util.Map<String, com.smartstaff.entity.LevelPassMarks>>() {});
+        } catch (Exception e) {
+            return java.util.Map.of();
+        }
     }
 
     @Override

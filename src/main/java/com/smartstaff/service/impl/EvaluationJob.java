@@ -15,6 +15,7 @@ import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.EvaluationRules;
 import com.smartstaff.util.EvaluationRules.TestOutcome;
 import com.smartstaff.util.ResultNarrator;
+import com.smartstaff.util.PassMarkRules;
 import com.smartstaff.util.ScoringRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -549,7 +550,8 @@ public class EvaluationJob {
             if (narrated.get(i).earned() < narrated.get(i).points() / 2.0) weak.add(lines.get(i));
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
-        ScoringRules.Result r = ScoringRules.score(scored, a.getJob().getScoringSettings(), questionFlags, tabs,
+        ScoringRules.Result r = ScoringRules.score(scored, PassMarkRules.effective(a.getJob().getScoringSettings(),
+                        settings.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel()), questionFlags, tabs,
                 proctoring.concern(a.getId()));
 
         a.setTheoryScore(r.theory());

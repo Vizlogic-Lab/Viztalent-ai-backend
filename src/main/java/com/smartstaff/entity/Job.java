@@ -60,6 +60,11 @@ public class Job {
     @Column(name = "scoring_settings", columnDefinition = "jsonb")
     private ScoringSettings scoringSettings;
 
+    /** Per-level pass-mark overrides for this job (level -> marks); null = use the global values. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "level_pass_marks", columnDefinition = "jsonb")
+    private java.util.Map<String, LevelPassMarks> levelPassMarks;
+
     /** F11 review policy (null = ReviewPolicy.DEFAULTS). */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "review_policy", columnDefinition = "jsonb")

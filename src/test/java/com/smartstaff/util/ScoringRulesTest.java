@@ -99,7 +99,7 @@ class ScoringRulesTest {
     @Test
     @DisplayName("per-job settings change weights and thresholds")
     void jobSettings() {
-        ScoringSettings s = new ScoringSettings(0.5, 0.5, 70, 40, 55, 2, 30);
+        ScoringSettings s = new ScoringSettings(0.5, 0.5, 70, 40, 55, 2, 30, 0);
         Result r = ScoringRules.score(List.of(theory(40, 100), handsOn(65, 100)), s, Set.of(), 0);
         assertThat(r.overall()).isEqualByComparingTo("52.50");
         assertThat(r.recommendation()).isEqualTo("HR_REVIEW");   // 55 ≤ 65 < 70
@@ -107,7 +107,7 @@ class ScoringRulesTest {
                 .isEqualTo("PROCEED");
         assertThat(ScoringRules.score(List.of(theory(90, 100), handsOn(90, 100)), s, Set.of(), 3).recommendation())
                 .isEqualTo("HR_REVIEW");
-        assertThat(new ScoringSettings(0.5, 0.6, 60, 50, 50, 5, 25).problem()).isNotNull();
+        assertThat(new ScoringSettings(0.5, 0.6, 60, 50, 50, 5, 25, 0).problem()).isNotNull();
         assertThat(ScoringSettings.DEFAULTS.problem()).isNull();
     }
 
