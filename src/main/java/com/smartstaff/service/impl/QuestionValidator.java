@@ -69,6 +69,8 @@ public class QuestionValidator {
             case MCQ, MSQ -> choice(q);
             case SCENARIO -> scenario(q);
             case LOGIC -> logic(q);
+            case ONE_WORD -> oneWord(q);
+            case PROJECT -> project(q);
             case CODE_WRITE -> codeWrite(q, draft.naiveSolution(), requireNaive);
             case CODE_DEBUG -> codeDebug(q);
             case CODE_OUTPUT -> codeOutput(q);
@@ -135,6 +137,40 @@ public class QuestionValidator {
         }
         q.setModelAnswer(answer.trim());
         return Result.pass("Single-value answer present.");
+    }
+
+    private static Result oneWord(AssessmentQuestion q) {
+        Result single = logic(q);
+        if (!single.ok()) return single;
+        if (q.getModelAnswer().split("\s+").length > 3) return Result.fail("A one-word answer can be at most 3 words.");
+        q.setAcceptedAnswers(new ArrayList<>(q.getAcceptedAnswers().stream()
+                .filter(a -> a != null && !a.isBlank()).map(String::trim).distinct().toList()));
+        return Result.pass("Answer and " + q.getAcceptedAnswers().size() + " alternative(s) present.");
+    }
+
+    private static Result project(AssessmentQuestion q) {
+        if (q.getRubric().isEmpty() && q.getKeyPoints().stream().noneMatch(p -> p != null && !p.isBlank())) {
+            return Result.fail("It needs a rubric (or key points) to grade against.");
+        }
+        for (var c : q.getRubric()) {
+            if (c.criterion() == null || c.criterion().isBlank()) return Result.fail("Every rubric criterion needs a name.");
+            if (c.weight() <= 0) return Result.fail("Rubric weights must be positive.");
+        }
+        return Result.pass("Rubric with " + q.getRubric().size() + " criteria present.");
+    }
+
+    /** Content checks for the written and choice types, without the skill check or the
+     *  code runner — what a hand-authored question must pass before it is saved. */
+    public static Result checkWritten(AssessmentQuestion q) {
+        if (q.getPrompt() == null || q.getPrompt().isBlank()) return Result.fail("The question text is empty.");
+        return switch (q.getType()) {
+            case MCQ, MSQ -> choice(q);
+            case SCENARIO -> scenario(q);
+            case LOGIC -> logic(q);
+            case ONE_WORD -> oneWord(q);
+            case PROJECT -> project(q);
+            case CODE_WRITE, CODE_DEBUG, CODE_OUTPUT -> Result.fail("Code questions can't be authored by hand here.");
+        };
     }
 
     // ── code ────────────────────────────────────────────────────────────

@@ -458,7 +458,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 answer.setLanguage(lang.isEmpty() ? null : lang);
                 answer.setCode(input.code());
             }
-            case CODE_OUTPUT, SCENARIO, LOGIC -> answer.setTextAnswer(input.text());
+            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> answer.setTextAnswer(input.text());
         }
         answer.setUpdatedAt(Instant.now());
         return answerRepository.save(answer);
@@ -534,7 +534,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 case MCQ, MSQ -> new CandidateAnswerView(qid, ans.getSelectedIndices(), null, null, null, null);
                 case CODE_WRITE, CODE_DEBUG -> new CandidateAnswerView(qid, null, ans.getLanguage(), ans.getCode(), null,
                         runs.getOrDefault(ans.getQuestion().getId(), 0L).intValue());
-                case CODE_OUTPUT, SCENARIO, LOGIC -> new CandidateAnswerView(qid, null, null, null, ans.getTextAnswer(), null);
+                case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> new CandidateAnswerView(qid, null, null, null, ans.getTextAnswer(), null);
             };
         }).toList();
     }

@@ -154,7 +154,7 @@ public class EvaluationJob {
 
     record Item(UUID questionId, String level, int seq, QuestionType type, Dimension dimension, Competency competency,
                 int points, String skill,
-                List<Integer> correct, String modelAnswer, List<String> keyPoints, String prompt,
+                List<Integer> correct, String modelAnswer, List<String> keyPoints, List<String> accepted, String prompt,
                 String expectedComplexity, List<RubricCriterion> rubric, Map<String, String> starter,
                 Map<String, String> reference, List<String> languages, List<TestData> tests,
                 Map<String, Object> candidateView,
@@ -241,7 +241,8 @@ public class EvaluationJob {
                 .toList();
         return new Item(q.getId(), q.getLevel(), q.getSeq(), q.getType(), q.getDimension(), q.getCompetency(),
                 q.getPoints(), q.getSkill(),
-                List.copyOf(q.getCorrectIndices()), q.getModelAnswer(), List.copyOf(q.getKeyPoints()), q.getPrompt(),
+                List.copyOf(q.getCorrectIndices()), q.getModelAnswer(), List.copyOf(q.getKeyPoints()),
+                List.copyOf(q.getAcceptedAnswers()), q.getPrompt(),
                 q.getExpectedComplexity(), List.copyOf(q.getRubric()), Map.copyOf(q.getStarterCode()),
                 Map.copyOf(q.getReferenceSolution()), List.copyOf(q.getLanguages()), tests,
                 json.convertValue(mapper.toCandidateView(q), new TypeReference<Map<String, Object>>() {}),
@@ -284,7 +285,10 @@ public class EvaluationJob {
             case LOGIC -> objective(it, blank(it.text()) ? null : EvaluationRules.logicMatches(it.modelAnswer(), it.text()) ? 1.0 : 0.0);
             case CODE_OUTPUT -> objective(it, blank(it.text()) ? null : EvaluationRules.codeOutputMatches(it.modelAnswer(), it.text()) ? 1.0 : 0.0);
             case CODE_WRITE, CODE_DEBUG -> gradeCode(it, apiKey);
+            case ONE_WORD -> objective(it, blank(it.text()) ? null
+                    : EvaluationRules.oneWordMatches(it.modelAnswer(), it.accepted(), it.text()) ? 1.0 : 0.0);
             case SCENARIO -> gradeScenario(it, apiKey);
+            case PROJECT -> gradeProject(it, apiKey);
         };
     }
 
@@ -379,6 +383,25 @@ public class EvaluationJob {
         evidence.addAll(ro.chosen().criteria().stream().map(c -> withKind("criterion", c.toMap())).toList());
         return new Graded(it, false, auto, fin, ro.runs(), evidence,
                 ro.disagreement() ? List.of("GRADER_DISAGREEMENT") : List.of(), submit);
+    }
+
+    /** PROJECT: the author's weighted rubric when there is one, else one criterion per key point. */
+    private Graded gradeProject(Item it, String apiKey) {
+        if (blank(it.text())) return zero(it, "Not answered.", List.of(), null, null);
+        List<RubricGrader.Criterion> criteria = !it.rubric().isEmpty() ? RubricGrader.codeCriteria(it.rubric())
+                : RubricGrader.keyPointCriteria(it.keyPoints());
+        if (criteria.isEmpty()) return zero(it, "No rubric to grade against.", List.of(), null, null);
+        String prompt = RubricGrader.scenarioPrompt(it.prompt(), it.modelAnswer(), criteria, it.text());
+        RubricGrader.Outcome ro = rubric(apiKey, prompt, criteria, it.text(), it.points(), it.points());
+        if (ro.unavailable()) {
+            return pending(it, "RUBRIC_PENDING", "AI grader unavailable — this project answer is pending.", BigDecimal.ZERO,
+                    null, List.of());
+        }
+        BigDecimal fin = EvaluationRules.points(ro.fraction(), it.points());
+        List<Map<String, Object>> evidence = new ArrayList<>(
+                ro.chosen().criteria().stream().map(c -> withKind("criterion", c.toMap())).toList());
+        return new Graded(it, false, BigDecimal.ZERO.setScale(2), fin, ro.runs(), evidence,
+                ro.disagreement() ? List.of("GRADER_DISAGREEMENT") : List.of(), null);
     }
 
     private Graded gradeScenario(Item it, String apiKey) {
@@ -646,7 +669,7 @@ public class EvaluationJob {
         return switch (it.type()) {
             case MCQ, MSQ -> !it.selected().isEmpty();
             case CODE_WRITE, CODE_DEBUG -> !blank(it.code());
-            case CODE_OUTPUT, SCENARIO, LOGIC -> !blank(it.text());
+            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> !blank(it.text());
         };
     }
 

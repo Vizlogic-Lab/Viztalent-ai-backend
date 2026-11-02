@@ -9,7 +9,11 @@ public enum QuestionType {
     CODE_DEBUG(Dimension.HANDS_ON, Competency.DEBUGGING),
     CODE_OUTPUT(Dimension.HANDS_ON, Competency.CODE_READING),
     SCENARIO(Dimension.HANDS_ON, Competency.APPLICATION),
-    LOGIC(Dimension.HANDS_ON, Competency.LOGIC);
+    LOGIC(Dimension.HANDS_ON, Competency.LOGIC),
+    /** Short typed answer matched against accepted answers (trimmed, case-folded, small typos allowed). */
+    ONE_WORD(Dimension.THEORY, Competency.CONCEPTS),
+    /** Longer written build/design task graded by the AI against a weighted rubric. */
+    PROJECT(Dimension.HANDS_ON, Competency.APPLICATION);
 
     private final Dimension dimension;
     private final Competency competency;
@@ -42,6 +46,8 @@ public enum QuestionType {
             case "LOGICAL", "LOGICAL_OUTPUT", "LOGIC", "REASONING", "APTITUDE" -> LOGIC;
             case "MULTIPLE_CHOICE", "SINGLE_CHOICE" -> MCQ;
             case "MULTIPLE_SELECT", "MULTI_SELECT", "MULTIPLE_ANSWER" -> MSQ;
+            case "ONE_WORD", "ONE_WORD_ANSWER", "SHORT_ANSWER", "FILL_IN_THE_BLANK", "FILL_BLANK" -> ONE_WORD;
+            case "PROJECT", "PROJECT_BASED", "CASE_STUDY", "ASSIGNMENT" -> PROJECT;
             default -> valueOf(t);
         };
     }

@@ -34,9 +34,9 @@ public final class ScoringRules {
                          String handsOnBand, Map<String, BigDecimal> competencies, String recommendation,
                          List<String> flags) {}
 
-    /** Non-technical role profiles: hands-on is scenario/logic only; everything else counts as theory. */
+    /** Non-technical role profiles: hands-on is scenario/logic/project only; everything else counts as theory. */
     public static Dimension dimensionFor(QuestionType type, Dimension stored, boolean technical) {
-        if (!technical) return type == QuestionType.SCENARIO || type == QuestionType.LOGIC ? Dimension.HANDS_ON : Dimension.THEORY;
+        if (!technical) return type == QuestionType.SCENARIO || type == QuestionType.LOGIC || type == QuestionType.PROJECT ? Dimension.HANDS_ON : Dimension.THEORY;
         return stored != null ? stored : type.dimension();
     }
 

@@ -102,7 +102,9 @@ public class AssessmentServiceImpl implements AssessmentService {
             return new AssessmentStatusResponse(true, false, null, 0, 0, null, null, false, false, null,
                     null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
-        Optional<Assessment> latest = assessmentRepository.findTopByJobIdAndCandidateIdIsNullOrderByVersionDesc(jobId);
+        // A hand-authored draft isn't shown here until it is published.
+        Optional<Assessment> latest = assessmentRepository.findTopByJobIdAndCandidateIdIsNullAndLifecycleNotOrderByVersionDesc(
+                jobId, AssessmentLifecycle.DRAFT);
         Optional<Assessment> current = assessmentRepository.findByJobIdAndCurrentTrue(jobId);
         if (latest.isEmpty()) {
             return new AssessmentStatusResponse(true, true, job.get().getTitle(), 0, 0, null, null, false, false, null,

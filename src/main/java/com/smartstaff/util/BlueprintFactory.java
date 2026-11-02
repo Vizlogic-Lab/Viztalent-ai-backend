@@ -148,6 +148,8 @@ public class BlueprintFactory {
             case CODE_OUTPUT -> byDifficulty(spec.difficulty(), 150, 210, 270);
             case SCENARIO -> spec.design() ? 600 : 300;
             case LOGIC -> 240;
+            case ONE_WORD -> 45;
+            case PROJECT -> 900;
         };
     }
 
