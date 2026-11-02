@@ -290,6 +290,8 @@ public class AttemptReportService {
             case "CODE_OUTPUT" -> "Predict output";
             case "SCENARIO" -> "Scenario";
             case "LOGIC" -> "Logic";
+            case "ONE_WORD" -> "One-word";
+            case "PROJECT" -> "Project";
             default -> type;
         };
     }

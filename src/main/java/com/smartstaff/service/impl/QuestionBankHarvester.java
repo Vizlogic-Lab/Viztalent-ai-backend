@@ -40,7 +40,9 @@ public class QuestionBankHarvester {
 
     static boolean eligible(AssessmentQuestion q) {
         return "AI".equals(q.getOrigin()) && q.isValidated() && !q.isProjectSpecific()
-                && q.getType() != QuestionType.SCENARIO;
+                && q.getType() != QuestionType.SCENARIO
+                // The bank has no columns for accepted answers or a project rubric.
+                && q.getType() != QuestionType.ONE_WORD && q.getType() != QuestionType.PROJECT;
     }
 
     public synchronized void harvest(AssessmentQuestion q, Map<String, String> naiveSolution) {

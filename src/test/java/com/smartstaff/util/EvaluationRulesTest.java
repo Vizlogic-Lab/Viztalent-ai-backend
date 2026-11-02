@@ -26,6 +26,27 @@ class EvaluationRulesTest {
     }
 
     @Test
+    @DisplayName("ONE_WORD: case, spaces and trailing punctuation don't matter; accepted answers count")
+    void oneWordNormalised() {
+        assertThat(EvaluationRules.oneWordMatches("Polymorphism", List.of(), "  polymorphism. ")).isTrue();
+        assertThat(EvaluationRules.oneWordMatches("Garbage Collection", List.of(), "garbage   collection")).isTrue();
+        assertThat(EvaluationRules.oneWordMatches("JVM", List.of("Java Virtual Machine"), "java virtual machine")).isTrue();
+        assertThat(EvaluationRules.oneWordMatches("JVM", List.of(), "\"jvm\"")).isTrue();
+        assertThat(EvaluationRules.oneWordMatches("JVM", List.of(), "")).isFalse();
+    }
+
+    @Test
+    @DisplayName("ONE_WORD: small typos pass on long words only; numbers compare by value, never by typo")
+    void oneWordTypos() {
+        assertThat(EvaluationRules.oneWordMatches("polymorphism", List.of(), "polymorfism")).as("1 edit, 12 chars").isTrue();
+        assertThat(EvaluationRules.oneWordMatches("polymorphism", List.of(), "polimorfizm")).as("3 edits").isFalse();
+        assertThat(EvaluationRules.oneWordMatches("index", List.of(), "indx")).as("1 edit, 5 chars").isTrue();
+        assertThat(EvaluationRules.oneWordMatches("JVM", List.of(), "JVN")).as("short answers are exact").isFalse();
+        assertThat(EvaluationRules.oneWordMatches("100", List.of(), "100.0")).isTrue();
+        assertThat(EvaluationRules.oneWordMatches("10000", List.of(), "10001")).as("numbers never fuzzy").isFalse();
+    }
+
+    @Test
     @DisplayName("MSQ: +1 per correct pick, -1 per wrong pick, floor 0, scaled to the correct options")
     void msq() {
         assertThat(EvaluationRules.msq(List.of(0, 2), List.of(0, 2))).isEqualTo(1.0);

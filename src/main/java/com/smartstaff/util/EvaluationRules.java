@@ -37,6 +37,58 @@ public final class EvaluationRules {
         return x != null && y != null && Math.abs(x - y) <= 1e-6;
     }
 
+    /** ONE_WORD: the answer matches the model answer or any accepted answer after
+     *  {@link #normaliseWord}; numbers equal within 1e-6. Small typos pass on longer
+     *  words: 1 edit from 5 characters, 2 edits from 10. Short answers ("JVM", "GC")
+     *  must be exact, so a typo can't turn one term into another. */
+    public static boolean oneWordMatches(String modelAnswer, List<String> accepted, String actual) {
+        String a = normaliseWord(actual);
+        if (a.isEmpty()) return false;
+        List<String> keys = new ArrayList<>();
+        if (modelAnswer != null) keys.add(modelAnswer);
+        if (accepted != null) keys.addAll(accepted);
+        for (String key : keys) {
+            String k = normaliseWord(key);
+            if (k.isEmpty()) continue;
+            if (k.equals(a)) return true;
+            Double x = number(k), y = number(a);
+            if (x != null || y != null) {
+                if (x != null && y != null && Math.abs(x - y) <= 1e-6) return true;
+                continue;   // numbers never match by edit distance
+            }
+            int allowed = k.length() >= 10 ? 2 : k.length() >= 5 ? 1 : 0;
+            if (allowed > 0 && editDistance(k, a, allowed) <= allowed) return true;
+        }
+        return false;
+    }
+
+    /** Lower-case, trimmed, inner whitespace collapsed, wrapping quotes and trailing punctuation dropped. */
+    public static String normaliseWord(String s) {
+        if (s == null) return "";
+        String t = s.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        t = t.replaceAll("^[\"'`]+|[\"'`]+$", "").replaceAll("[.,;:!?]+$", "").trim();
+        return t;
+    }
+
+    /** Levenshtein distance, giving up (returning max + 1) once it must exceed max. */
+    static int editDistance(String a, String b, int max) {
+        if (Math.abs(a.length() - b.length()) > max) return max + 1;
+        int[] prev = new int[b.length() + 1], cur = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            cur[0] = i;
+            int rowMin = cur[0];
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                rowMin = Math.min(rowMin, cur[j]);
+            }
+            if (rowMin > max) return max + 1;
+            int[] t = prev; prev = cur; cur = t;
+        }
+        return prev[b.length()];
+    }
+
     /** CODE_OUTPUT: exact after normalising line endings and trailing whitespace (case matters). */
     public static boolean codeOutputMatches(String expected, String actual) {
         return OutputComparator.normalise(expected).equals(OutputComparator.normalise(actual));

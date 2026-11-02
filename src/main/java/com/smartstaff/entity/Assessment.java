@@ -53,6 +53,19 @@ public class Assessment {
     @Column(name = "candidate_id")
     private UUID candidateId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private AssessmentLifecycle lifecycle = AssessmentLifecycle.PUBLISHED;
+
+    /** Author's name for a hand-authored (source CUSTOM) version. */
+    @Column(columnDefinition = "TEXT")
+    private String title;
+
+    /** Section sizes and marks for a hand-authored version; null on generated ones. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "marking_scheme", columnDefinition = "jsonb")
+    private MarkingScheme markingScheme;
+
     @Column(columnDefinition = "TEXT")
     private String error;
 
@@ -65,4 +78,7 @@ public class Assessment {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
 }

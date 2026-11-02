@@ -124,10 +124,12 @@ public class QuestionDrafter {
             case CODE_OUTPUT -> "predict-the-output code reading";
             case SCENARIO -> "applied scenario (short written answer)";
             case LOGIC -> "logical reasoning";
+            case ONE_WORD -> "one-word answer";
+            case PROJECT -> "project-based (longer written build or design task)";
         };
     }
 
-    private static String instructions(Blueprint.Slot slot) {
+    static String instructions(Blueprint.Slot slot) {
         return switch (slot.type()) {
             case MCQ -> "Exactly 4 distinct options and exactly ONE correct option; correct_indices holds its 0-based index. "
                     + "Explain briefly why it is correct.";
@@ -154,6 +156,14 @@ public class QuestionDrafter {
                     + "what the candidate would do. ")
                     + "model_answer is what a strong candidate would write (120-200 words); key_points are 4 to 6 "
                     + "concrete, checkable points a grader can look for.";
+            case ONE_WORD -> "Ask for a single term, keyword, number or name that has exactly one correct answer "
+                    + "(no opinions, no lists). answer is that term; accepted_answers lists other spellings or synonyms "
+                    + "that mean exactly the same thing (may be empty). Explain briefly.";
+            case PROJECT -> "Set a realistic mini-project this role would deliver (build, design or migrate something), "
+                    + "answerable in writing in about " + Math.max(1, slot.timeEstimateSec() / 60) + " minutes: what to "
+                    + "build, constraints and what the answer must cover. model_answer is what a strong candidate would "
+                    + "write (200-300 words). rubric has 3 to 5 criteria, each with a description of what good looks "
+                    + "like and a weight from 1 to 5.";
             case LOGIC -> "A reasoning or algorithmic-thinking problem whose answer is a single short value (a number or "
                     + "one word). Give the answer and a short explanation.";
         };
@@ -208,6 +218,19 @@ public class QuestionDrafter {
                 props.put("prompt", str());
                 props.put("answer", str());
                 props.put("explanation", str());
+            }
+            case ONE_WORD -> {
+                props.put("prompt", str());
+                props.put("answer", str());
+                props.put("accepted_answers", arr(str()));
+                props.put("explanation", str());
+            }
+            case PROJECT -> {
+                props.put("prompt", str());
+                props.put("model_answer", str());
+                props.put("rubric", arr(obj(Map.of(
+                        "criterion", str(), "description", str(), "weight", Map.of("type", "INTEGER")),
+                        List.of("criterion", "description", "weight"))));
             }
         }
         return obj(props, List.copyOf(props.keySet()));
@@ -327,6 +350,29 @@ public class QuestionDrafter {
                 q.setPrompt(required(o, "prompt"));
                 q.setModelAnswer(text(o, "answer"));
                 q.setExplanation(text(o, "explanation"));
+            }
+            case ONE_WORD -> {
+                q.setPrompt(required(o, "prompt"));
+                q.setModelAnswer(required(o, "answer"));
+                List<String> accepted = new ArrayList<>();
+                o.path("accepted_answers").forEach(n -> {
+                    String v = n.asText("").trim();
+                    if (!v.isEmpty()) accepted.add(v);
+                });
+                q.setAcceptedAnswers(accepted);
+                q.setExplanation(text(o, "explanation"));
+            }
+            case PROJECT -> {
+                q.setPrompt(required(o, "prompt"));
+                q.setModelAnswer(text(o, "model_answer"));
+                List<RubricCriterion> rubric = new ArrayList<>();
+                o.path("rubric").forEach(r -> {
+                    String name = r.path("criterion").asText("").trim();
+                    if (!name.isEmpty()) rubric.add(new RubricCriterion(name,
+                            Math.max(1, Math.min(5, r.path("weight").asInt(1))), r.path("description").asText("").trim()));
+                });
+                if (rubric.isEmpty()) throw new IllegalArgumentException("rubric is missing");
+                q.setRubric(rubric);
             }
         }
         return new QuestionDraft(q, naive);

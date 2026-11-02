@@ -78,7 +78,7 @@ public class AssessmentQuestion {
     @Column(name = "bug_descriptions", columnDefinition = "jsonb")
     private List<String> bugDescriptions = new ArrayList<>();
 
-    /** AI or BANK. */
+    /** AI, BANK or MANUAL (typed in by the author). */
     @Column(nullable = false, length = 8)
     private String origin = "AI";
 
@@ -125,6 +125,11 @@ public class AssessmentQuestion {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<RubricCriterion> rubric = new ArrayList<>();
+
+    /** ONE_WORD: answers besides model_answer that also earn full marks (synonyms, spellings). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "accepted_answers", columnDefinition = "jsonb", nullable = false)
+    private List<String> acceptedAnswers = new ArrayList<>();
 
     private boolean validated;
 

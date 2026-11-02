@@ -25,6 +25,13 @@ public interface AssessmentRepository extends JpaRepository<Assessment, UUID> {
 
     List<Assessment> findByJobIdOrderByVersionDesc(UUID jobId);
 
+    /** Hand-authored versions of a job (source CUSTOM), newest first. */
+    List<Assessment> findByJobIdAndSourceOrderByVersionDesc(UUID jobId, String source);
+
+    /** Newest shared version that isn't an unpublished draft. */
+    Optional<Assessment> findTopByJobIdAndCandidateIdIsNullAndLifecycleNotOrderByVersionDesc(
+            UUID jobId, com.smartstaff.entity.AssessmentLifecycle lifecycle);
+
     @Query("select coalesce(max(a.version), 0) from Assessment a where a.job.id = :jobId")
     int maxVersion(@Param("jobId") UUID jobId);
 

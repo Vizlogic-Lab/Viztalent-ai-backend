@@ -97,7 +97,11 @@ public class InviteServiceImpl implements InviteService {
         // Level 1 (written from the JD + resume on first invite, then reused). It only
         // has Level 1, so a request for Level 2, Level 3 or several levels uses the
         // job's current READY version instead — it never turns into a Level 1 link.
-        boolean levelOneOnly = !req.combined() && levels.size() == 1
+        // A published hand-authored assessment is what the author wants every candidate to sit,
+        // so it is never swapped for a personal one.
+        boolean customCurrent = sharedReadyAssessment(jobId).map(a -> CustomAssessmentService.SOURCE.equals(a.getSource()))
+                .orElse(false);
+        boolean levelOneOnly = !customCurrent && !req.combined() && levels.size() == 1
                 && PersonalAssessmentGenerator.LEVEL.equals(levels.get(0));
         Candidate candidate = !levelOneOnly ? null
                 : candidateRepository.findFirstByJobIdAndEmailIgnoreCase(jobId, req.candidate_email().trim())

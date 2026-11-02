@@ -41,6 +41,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiErrorResponse.of(message));
     }
 
+    /** Malformed JSON, or a value of the wrong kind (e.g. an unknown question type). */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnreadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        String message = "The request body isn't valid JSON for this endpoint.";
+        if (ex.getCause() instanceof com.fasterxml.jackson.databind.exc.InvalidFormatException f && !f.getPath().isEmpty()) {
+            message = "Invalid value for '" + f.getPath().get(f.getPath().size() - 1).getFieldName() + "'.";
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiErrorResponse.of(message, "bad_request_body"));
+    }
+
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
