@@ -70,7 +70,7 @@ public class QuestionValidator {
             case SCENARIO -> scenario(q);
             case LOGIC -> logic(q);
             case ONE_WORD -> oneWord(q);
-            case PROJECT -> project(q);
+            case PROJECT, DEBUG -> project(q);
             case CODE_WRITE -> codeWrite(q, draft.naiveSolution(), requireNaive);
             case CODE_DEBUG -> codeDebug(q);
             case CODE_OUTPUT -> codeOutput(q);
@@ -168,7 +168,7 @@ public class QuestionValidator {
             case SCENARIO -> scenario(q);
             case LOGIC -> logic(q);
             case ONE_WORD -> oneWord(q);
-            case PROJECT -> project(q);
+            case PROJECT, DEBUG -> project(q);
             case CODE_WRITE, CODE_DEBUG, CODE_OUTPUT -> Result.fail("Code questions can't be authored by hand here.");
         };
     }

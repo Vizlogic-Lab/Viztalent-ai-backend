@@ -13,7 +13,10 @@ public enum QuestionType {
     /** Short typed answer matched against accepted answers (trimmed, case-folded, small typos allowed). */
     ONE_WORD(Dimension.THEORY, Competency.CONCEPTS),
     /** Longer written build/design task graded by the AI against a weighted rubric. */
-    PROJECT(Dimension.HANDS_ON, Competency.APPLICATION);
+    PROJECT(Dimension.HANDS_ON, Competency.APPLICATION),
+    /** Custom papers only: the candidate finds and fixes a bug in a snippet; the AI grades the fix
+     *  against a weighted rubric, the same way as PROJECT. Typed in the text box, not run. */
+    DEBUG(Dimension.HANDS_ON, Competency.DEBUGGING);
 
     private final Dimension dimension;
     private final Competency competency;

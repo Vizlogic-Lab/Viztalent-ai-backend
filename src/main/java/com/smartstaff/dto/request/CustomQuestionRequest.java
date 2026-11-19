@@ -13,7 +13,8 @@ import java.util.List;
  *    ONE_WORD  answer (+ accepted_answers: synonyms, other spellings)
  *    SCENARIO  model_answer + key_points (4-6)
  *    PROJECT   rubric (1-8 weighted criteria); model_answer optional
- *  marks: omit to use the section's default from the marking scheme. */
+ *  marks: omit to use the section's default from the marking scheme.
+ *  save_to_book: also keep the question in the company question book. */
 @ValidCustomQuestion
 public record CustomQuestionRequest(
         @NotNull QuestionType type,
@@ -27,7 +28,9 @@ public record CustomQuestionRequest(
         @Size(max = 8) List<@Valid RubricItem> rubric,
         @Min(0) @Max(100) Integer marks,
         @Size(max = 120) String skill,
-        @Pattern(regexp = "(?i)easy|medium|hard") String difficulty
+        @Pattern(regexp = "(?i)easy|medium|hard") String difficulty,
+        /** true to also save this question to the company question book. */
+        Boolean save_to_book
 ) {
     public record RubricItem(
             @NotBlank @Size(max = 80) String criterion,

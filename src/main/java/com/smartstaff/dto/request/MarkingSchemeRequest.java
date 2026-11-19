@@ -4,18 +4,27 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
-/** Default marks for each question of a section, and the total the marks must reach.
- *  Section sizes are fixed (25 / 15 / 5 / 5); marks of single questions can be
- *  overridden afterwards, so the defaults only need to land on the target here. */
+/** The employer's paper setup: how many questions of each type, the marks for each type,
+ *  the total number of questions, the time limit and an optional passing mark.
+ *  The question counts must add up to total_questions. There is no fixed total of
+ *  marks; the paper's marks are the sum of its question marks. */
 public record MarkingSchemeRequest(
+        @Min(0) @Max(500) int mcq_count,
         @Min(0) @Max(100) int mcq_marks,
+        @Min(0) @Max(500) int one_word_count,
         @Min(0) @Max(100) int one_word_marks,
+        @Min(0) @Max(500) int scenario_count,
         @Min(0) @Max(100) int scenario_marks,
+        @Min(0) @Max(500) int project_count,
         @Min(0) @Max(100) int project_marks,
-        @Min(1) @Max(1000) int target_total
+        @Min(0) @Max(500) int debug_count,
+        @Min(0) @Max(100) int debug_marks,
+        @Min(1) @Max(500) int total_questions,
+        @Min(1) @Max(600) int duration_minutes,
+        @Min(0) @Max(100) Integer passing_percent
 ) {
-    @AssertTrue(message = "25 MCQ, 15 one-word, 5 scenario and 5 project marks must add up to target_total.")
-    public boolean isBalanced() {
-        return 25 * mcq_marks + 15 * one_word_marks + 5 * scenario_marks + 5 * project_marks == target_total;
+    @AssertTrue(message = "The MCQ, one-word, scenario, project and debug counts must add up to total_questions.")
+    public boolean isCountsMatchTotal() {
+        return mcq_count + one_word_count + scenario_count + project_count + debug_count == total_questions;
     }
 }

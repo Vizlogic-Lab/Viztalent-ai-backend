@@ -151,7 +151,7 @@ public class CalibrationSetService {
         return switch (q.getType()) {
             case CODE_WRITE -> RubricGrader.codeCriteria(q.getRubric());
             case SCENARIO -> RubricGrader.keyPointCriteria(q.getKeyPoints());
-            case PROJECT -> q.getRubric().isEmpty() ? RubricGrader.keyPointCriteria(q.getKeyPoints())
+            case PROJECT, DEBUG -> q.getRubric().isEmpty() ? RubricGrader.keyPointCriteria(q.getKeyPoints())
                     : RubricGrader.codeCriteria(q.getRubric());
             default -> List.of();
         };

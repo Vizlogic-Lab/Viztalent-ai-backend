@@ -363,7 +363,9 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
 
     private AssessmentAttempt createAttempt(Invite invite, String level) {
         Assessment assessment = invite.getAssessment();
-        long budget = questionsFor(assessment, level).stream()
+        // A custom paper sets its own time limit; older papers and generated tests use the question estimates.
+        Integer paperMinutes = assessment.getMarkingScheme() == null ? null : assessment.getMarkingScheme().duration_minutes();
+        long budget = paperMinutes != null ? paperMinutes * 60L : questionsFor(assessment, level).stream()
                 .filter(q -> q.getTimeEstimateSec() != null)
                 .mapToLong(AssessmentQuestion::getTimeEstimateSec)
                 .sum();
@@ -458,7 +460,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 answer.setLanguage(lang.isEmpty() ? null : lang);
                 answer.setCode(input.code());
             }
-            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> answer.setTextAnswer(input.text());
+            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT, DEBUG -> answer.setTextAnswer(input.text());
         }
         answer.setUpdatedAt(Instant.now());
         return answerRepository.save(answer);
@@ -534,7 +536,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
                 case MCQ, MSQ -> new CandidateAnswerView(qid, ans.getSelectedIndices(), null, null, null, null);
                 case CODE_WRITE, CODE_DEBUG -> new CandidateAnswerView(qid, null, ans.getLanguage(), ans.getCode(), null,
                         runs.getOrDefault(ans.getQuestion().getId(), 0L).intValue());
-                case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> new CandidateAnswerView(qid, null, null, null, ans.getTextAnswer(), null);
+                case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT, DEBUG -> new CandidateAnswerView(qid, null, null, null, ans.getTextAnswer(), null);
             };
         }).toList();
     }

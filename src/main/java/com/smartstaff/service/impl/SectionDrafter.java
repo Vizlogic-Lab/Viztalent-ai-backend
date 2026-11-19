@@ -164,7 +164,7 @@ public class SectionDrafter {
             case MCQ -> "multiple-choice (single answer)";
             case ONE_WORD -> "one-word answer";
             case SCENARIO -> "scenario-based (short written answer)";
-            case PROJECT -> "project-based (longer written task)";
+            case PROJECT, DEBUG -> "project-based (longer written task)";
             default -> type.name();
         };
     }

@@ -19,8 +19,8 @@ public class CustomQuestionValidator implements ConstraintValidator<ValidCustomQ
             case MCQ -> mcq(q, ctx);
             case ONE_WORD -> oneWord(q, ctx);
             case SCENARIO -> scenario(q, ctx);
-            case PROJECT -> project(q, ctx);
-            default -> fail(ctx, "type", "Only MCQ, ONE_WORD, SCENARIO and PROJECT questions can be authored here.");
+            case PROJECT, DEBUG -> project(q, ctx);
+            default -> fail(ctx, "type", "Only MCQ, ONE_WORD, SCENARIO, PROJECT and DEBUG questions can be authored here.");
         };
     }
 
