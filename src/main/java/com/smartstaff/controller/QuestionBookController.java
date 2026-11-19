@@ -19,9 +19,12 @@ import java.util.UUID;
 public class QuestionBookController {
 
     private final QuestionBookService service;
+    private final com.smartstaff.service.impl.QuestionLibraryService library;
 
-    public QuestionBookController(QuestionBookService service) {
+    public QuestionBookController(QuestionBookService service,
+                                  com.smartstaff.service.impl.QuestionLibraryService library) {
         this.service = service;
+        this.library = library;
     }
 
     @GetMapping
@@ -30,6 +33,17 @@ public class QuestionBookController {
                                              @RequestParam(required = false) String skill,
                                              @RequestParam(required = false) String text) {
         return service.search(parseType(type), difficulty, skill, text);
+    }
+
+    /** All questions in one list: the book, questions in papers, and the older HR bank.
+     *  source is ALL, BOOK, PAPER or HR. Read-only. */
+    @GetMapping("/library")
+    public List<java.util.Map<String, Object>> library(@RequestParam(required = false, defaultValue = "ALL") String source,
+                                                       @RequestParam(required = false) String type,
+                                                       @RequestParam(required = false) String difficulty,
+                                                       @RequestParam(required = false) String skill,
+                                                       @RequestParam(required = false) String text) {
+        return library.search(source, type, difficulty, skill, text);
     }
 
     @DeleteMapping("/{id}")
