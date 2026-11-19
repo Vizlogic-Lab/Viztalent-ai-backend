@@ -292,6 +292,7 @@ public class AttemptReportService {
             case "LOGIC" -> "Logic";
             case "ONE_WORD" -> "One-word";
             case "PROJECT" -> "Project";
+            case "DEBUG" -> "Debug";
             default -> type;
         };
     }

@@ -289,7 +289,7 @@ public class EvaluationJob {
             case ONE_WORD -> objective(it, blank(it.text()) ? null
                     : EvaluationRules.oneWordMatches(it.modelAnswer(), it.accepted(), it.text()) ? 1.0 : 0.0);
             case SCENARIO -> gradeScenario(it, apiKey);
-            case PROJECT -> gradeProject(it, apiKey);
+            case PROJECT, DEBUG -> gradeProject(it, apiKey);
         };
     }
 
@@ -551,7 +551,8 @@ public class EvaluationJob {
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
         ScoringRules.Result r = ScoringRules.score(scored, PassMarkRules.effective(a.getJob().getScoringSettings(),
-                        settings.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel()), questionFlags, tabs,
+                        settings.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel(),
+                        PassMarkRules.paperPassing(a.getAssessment().getMarkingScheme())), questionFlags, tabs,
                 proctoring.concern(a.getId()));
 
         a.setTheoryScore(r.theory());
@@ -671,7 +672,7 @@ public class EvaluationJob {
         return switch (it.type()) {
             case MCQ, MSQ -> !it.selected().isEmpty();
             case CODE_WRITE, CODE_DEBUG -> !blank(it.code());
-            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT -> !blank(it.text());
+            case CODE_OUTPUT, SCENARIO, LOGIC, ONE_WORD, PROJECT, DEBUG -> !blank(it.text());
         };
     }
 

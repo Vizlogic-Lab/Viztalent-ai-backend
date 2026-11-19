@@ -27,9 +27,20 @@ public final class PassMarkRules {
         return null;
     }
 
+    /** The paper's own passing percent when it sets one (a custom paper), else null. */
+    public static Integer paperPassing(com.smartstaff.entity.MarkingScheme scheme) {
+        return scheme == null ? null : scheme.passing_percent();
+    }
+
     /** The scoring settings to grade one attempt with. level may be null (interviews): then no level marks apply. */
     public static ScoringSettings effective(ScoringSettings base, Map<String, LevelPassMarks> global,
                                             Map<String, LevelPassMarks> jobOverride, String level) {
+        return effective(base, global, jobOverride, level, null);
+    }
+
+    /** As above, and a custom paper's own passing percent (when not null) beats every level value for the overall mark. */
+    public static ScoringSettings effective(ScoringSettings base, Map<String, LevelPassMarks> global,
+                                            Map<String, LevelPassMarks> jobOverride, String level, Integer paperPassing) {
         ScoringSettings s = ScoringSettings.orDefaults(base);
         if (level == null) return s;
         LevelPassMarks job = jobOverride == null ? null : jobOverride.get(level);
@@ -38,7 +49,8 @@ public final class PassMarkRules {
                 pick(job == null ? null : job.proceed_hands_on_min(), glob == null ? null : glob.proceed_hands_on_min(), s.proceed_hands_on_min()),
                 pick(job == null ? null : job.proceed_theory_min(), glob == null ? null : glob.proceed_theory_min(), s.proceed_theory_min()),
                 s.review_hands_on_min(), s.max_tab_switches(), s.theory_practice_gap(),
-                pick(job == null ? null : job.overall_pass(), glob == null ? null : glob.overall_pass(), s.overall_pass()));
+                paperPassing != null ? paperPassing
+                        : pick(job == null ? null : job.overall_pass(), glob == null ? null : glob.overall_pass(), s.overall_pass()));
     }
 
     private static int pick(Integer job, Integer global, int fallback) {

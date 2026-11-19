@@ -120,7 +120,8 @@ class CustomAssessmentIntegrationTest extends IntegrationTestBase {
         JsonNode a = create();
         assertThat(a.path("lifecycle").asText()).isEqualTo("DRAFT");
         assertThat(a.path("target_total").asInt()).isEqualTo(100);
-        assertThat(a.path("sections")).extracting(s -> s.path("required").asInt()).containsExactly(25, 15, 5, 5);
+        assertThat(a.path("sections")).extracting(s -> s.path("required").asInt()).containsExactly(25, 15, 5, 5, 0);
+        assertThat(a.path("total_questions").asInt()).isEqualTo(50);
         assertThat(a.path("publishable").asBoolean()).isFalse();
         postJsonAs(admin, base + "/" + a.path("id").asText() + "/publish", Map.of())
                 .andExpect(status().isUnprocessableEntity())
@@ -160,14 +161,35 @@ class CustomAssessmentIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("marking scheme defaults must reach the target")
+    @DisplayName("the question counts must add up to the declared total; marks and the time limit are the employer's")
     void schemeMustBalance() throws Exception {
         String id = create().path("id").asText();
-        putJsonAs(admin, base + "/" + id + "/marking-scheme", Map.of("mcq_marks", 2, "one_word_marks", 2,
-                "scenario_marks", 4, "project_marks", 4, "target_total", 100)).andExpect(status().isBadRequest());
-        JsonNode a = bodyOf(putJsonAs(admin, base + "/" + id + "/marking-scheme", Map.of("mcq_marks", 2, "one_word_marks", 2,
-                "scenario_marks", 10, "project_marks", 10, "target_total", 180)).andExpect(status().isOk()));
-        assertThat(a.path("target_total").asInt()).isEqualTo(180);
+        // 20 + 5 + 3 + 2 = 30, but 35 declared: refused.
+        putJsonAs(admin, base + "/" + id + "/marking-scheme", scheme(20, 5, 3, 2, 0, 35, 45, null))
+                .andExpect(status().isBadRequest());
+        // 20 MCQ x2 + 5 one-word x1 + 3 scenario x5 + 2 project x10 = 80 marks, 30 questions, 40 minutes, pass at 65%.
+        JsonNode a = bodyOf(putJsonAs(admin, base + "/" + id + "/marking-scheme", scheme(20, 5, 3, 2, 0, 30, 40, 65))
+                .andExpect(status().isOk()));
+        assertThat(a.path("total_questions").asInt()).isEqualTo(30);
+        assertThat(a.path("duration_minutes").asInt()).isEqualTo(40);
+        assertThat(a.path("passing_percent").asInt()).isEqualTo(65);
+        assertThat(a.path("target_total").asInt()).isEqualTo(80);
+        assertThat(a.path("sections")).extracting(s -> s.path("required").asInt()).containsExactly(20, 5, 3, 2, 0);
+    }
+
+    /** A full setup request: counts per type (each marked 2/1/5/10/3), total, duration and passing percent. */
+    private static Map<String, Object> scheme(int mcq, int oneWord, int scenario, int project, int debug,
+                                              int total, int minutes, Integer passing) {
+        Map<String, Object> m = new java.util.HashMap<>();
+        m.put("mcq_count", mcq); m.put("mcq_marks", 2);
+        m.put("one_word_count", oneWord); m.put("one_word_marks", 1);
+        m.put("scenario_count", scenario); m.put("scenario_marks", 5);
+        m.put("project_count", project); m.put("project_marks", 10);
+        m.put("debug_count", debug); m.put("debug_marks", 3);
+        m.put("total_questions", total);
+        m.put("duration_minutes", minutes);
+        m.put("passing_percent", passing);
+        return m;
     }
 
     @Test

@@ -149,7 +149,7 @@ public class BlueprintFactory {
             case SCENARIO -> spec.design() ? 600 : 300;
             case LOGIC -> 240;
             case ONE_WORD -> 45;
-            case PROJECT -> 900;
+            case PROJECT, DEBUG -> 900;
         };
     }
 

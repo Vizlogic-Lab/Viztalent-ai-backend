@@ -42,6 +42,9 @@ public class CustomAssessmentService {
     public static final String LEVEL = "L1";
     /** Section order on the paper. */
     static final List<QuestionType> SECTIONS =
+            List.of(QuestionType.MCQ, QuestionType.ONE_WORD, QuestionType.SCENARIO, QuestionType.PROJECT, QuestionType.DEBUG);
+    /** Sections "Generate by AI" can fill. DEBUG questions are written by hand for now. */
+    static final List<QuestionType> AI_SECTIONS =
             List.of(QuestionType.MCQ, QuestionType.ONE_WORD, QuestionType.SCENARIO, QuestionType.PROJECT);
 
     private final AssessmentRepository assessments;
@@ -53,11 +56,13 @@ public class CustomAssessmentService {
     private final ReviewRouter reviewRouter;
     private final ActivityRecorder activity;
     private final TransactionTemplate tx;
+    private final QuestionBookService book;
 
     public CustomAssessmentService(AssessmentRepository assessments, AssessmentQuestionRepository questions,
                                    AssessmentAttemptRepository attempts, JobRepository jobs, SettingsService settings,
                                    SectionDrafter drafter, ReviewRouter reviewRouter, ActivityRecorder activity,
-                                   PlatformTransactionManager txManager) {
+                                   PlatformTransactionManager txManager, QuestionBookService book) {
+        this.book = book;
         this.assessments = assessments;
         this.questions = questions;
         this.attempts = attempts;
@@ -127,11 +132,23 @@ public class CustomAssessmentService {
 
     @Transactional
     public CustomAssessmentResponse addQuestion(UUID jobId, UUID id, CustomQuestionRequest req) {
+        CustomAssessmentResponse out = addQuestion(jobId, id, req, "MANUAL");
+        if (Boolean.TRUE.equals(req.save_to_book())) book.save(req, "MANUAL", null);
+        return out;
+    }
+
+    /** Copies a question from the company book into the paper. */
+    @Transactional
+    public CustomAssessmentResponse addFromBook(UUID jobId, UUID id, UUID bookItemId) {
+        return addQuestion(jobId, id, book.copy(bookItemId), "BANK");
+    }
+
+    private CustomAssessmentResponse addQuestion(UUID jobId, UUID id, CustomQuestionRequest req, String origin) {
         Assessment a = loadEditable(jobId, id);
         List<AssessmentQuestion> qs = new ArrayList<>(questions.findByAssessmentIdOrderByLevelAscSeqAsc(a.getId()));
         requireRoom(a, qs, req.type(), 1);
         AssessmentQuestion q = newQuestion(a, req.type());
-        q.setOrigin("MANUAL");
+        q.setOrigin(origin);
         apply(q, req, a.getMarkingScheme());
         qs.add(q);
         return saveChanges(a, qs);
@@ -170,8 +187,9 @@ public class CustomAssessmentService {
      *  before saving, since a candidate may have started meanwhile. */
     public CustomAssessmentResponse generateSection(UUID jobId, UUID id, SectionGenerateRequest req) {
         QuestionType type = req.type();
-        if (!SECTIONS.contains(type)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Sections are MCQ, ONE_WORD, SCENARIO and PROJECT.", "unknown_section");
+        if (!AI_SECTIONS.contains(type)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Generate by AI works for MCQ, ONE_WORD, SCENARIO and PROJECT. Add DEBUG questions by hand.", "unknown_section");
         }
         String key = settings.getGeminiApiKeyOrNull();
         if (key == null || key.isBlank()) {
@@ -215,6 +233,7 @@ public class CustomAssessmentService {
                 d.setLevel(LEVEL);
                 d.setPoints(a.getMarkingScheme().marksFor(type));
                 qs.add(d);
+                book.save(toRequest(d), "AI", null);
             }
             activity.record(jobId, ActivityRecorder.ASSESSMENT, "AI wrote " + Math.min(room, drafted.size()) + " "
                     + type + " question(s) for custom assessment \"" + a.getTitle() + "\"", a.getId());
@@ -282,16 +301,18 @@ public class CustomAssessmentService {
             QuestionValidator.Result r = QuestionValidator.checkWritten(q);
             if (!r.ok()) out.add("Question " + (q.getSeq() + 1) + " (" + q.getType() + "): " + r.reason());
         }
-        int total = totalMarks(qs);
-        if (total != scheme.target_total()) {
-            out.add("Marks add up to " + total + ", not the target " + scheme.target_total() + ".");
-        }
         return out;
     }
 
     static MarkingScheme scheme(MarkingSchemeRequest r) {
-        return new MarkingScheme(MarkingScheme.sections(r.mcq_marks(), r.one_word_marks(), r.scenario_marks(),
-                r.project_marks()), r.target_total());
+        Map<QuestionType, MarkingScheme.Section> sections = MarkingScheme.sectionMap(
+                new MarkingScheme.Section(r.mcq_count(), r.mcq_marks()),
+                new MarkingScheme.Section(r.one_word_count(), r.one_word_marks()),
+                new MarkingScheme.Section(r.scenario_count(), r.scenario_marks()),
+                new MarkingScheme.Section(r.project_count(), r.project_marks()),
+                new MarkingScheme.Section(r.debug_count(), r.debug_marks()));
+        int marks = sections.values().stream().mapToInt(s -> s.count() * s.marks_each()).sum();
+        return new MarkingScheme(sections, marks, r.total_questions(), r.duration_minutes(), r.passing_percent());
     }
 
     static int timeEstimate(QuestionType type) {
@@ -300,6 +321,7 @@ public class CustomAssessmentService {
             case ONE_WORD -> 45;
             case SCENARIO -> 300;
             case PROJECT -> 900;
+            case DEBUG -> 600;
             default -> 120;
         };
     }
@@ -350,7 +372,7 @@ public class CustomAssessmentService {
 
     private static void requireRoom(Assessment a, List<AssessmentQuestion> qs, QuestionType type, int adding) {
         if (!SECTIONS.contains(type)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Sections are MCQ, ONE_WORD, SCENARIO and PROJECT.", "unknown_section");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unknown section.", "unknown_section");
         }
         if (count(qs, type) + adding > a.getMarkingScheme().required(type)) throw sectionFull(type);
     }
@@ -380,6 +402,24 @@ public class CustomAssessmentService {
     }
 
     /** Copies the request onto the question and runs the same content checks as AI questions. */
+    /** The question as an editor request, so the question book can keep it (AI-written questions). */
+    private static CustomQuestionRequest toRequest(AssessmentQuestion q) {
+        boolean mcq = q.getType() == QuestionType.MCQ;
+        boolean oneWord = q.getType() == QuestionType.ONE_WORD;
+        boolean scenario = q.getType() == QuestionType.SCENARIO;
+        boolean rubric = q.getType() == QuestionType.PROJECT || q.getType() == QuestionType.DEBUG;
+        return new CustomQuestionRequest(q.getType(), q.getPrompt(),
+                mcq ? q.getOptions() : null,
+                mcq && !q.getCorrectIndices().isEmpty() ? q.getCorrectIndices().get(0) : null,
+                oneWord ? q.getModelAnswer() : null,
+                oneWord ? q.getAcceptedAnswers() : null,
+                scenario || rubric ? q.getModelAnswer() : null,
+                scenario ? q.getKeyPoints() : null,
+                rubric ? q.getRubric().stream()
+                        .map(c -> new CustomQuestionRequest.RubricItem(c.criterion(), c.weight(), c.description())).toList() : null,
+                q.getPoints(), q.getSkill(), q.getDifficulty(), null);
+    }
+
     private static void apply(AssessmentQuestion q, CustomQuestionRequest r, MarkingScheme scheme) {
         q.setPrompt(r.prompt().strip());
         q.setPoints(r.marks() == null ? scheme.marksFor(r.type()) : r.marks());
@@ -399,7 +439,7 @@ public class CustomAssessmentService {
                 q.setModelAnswer(r.model_answer().strip());
                 q.setKeyPoints(r.key_points().stream().map(String::strip).toList());
             }
-            case PROJECT -> {
+            case PROJECT, DEBUG -> {
                 q.setModelAnswer(r.model_answer() == null ? null : r.model_answer().strip());
                 q.setRubric(r.rubric().stream()
                         .map(c -> new RubricCriterion(c.criterion().strip(), c.weight(), c.description().strip())).toList());
@@ -452,7 +492,8 @@ public class CustomAssessmentService {
                 q.getType() == QuestionType.ONE_WORD ? null : q.getModelAnswer(), q.getKeyPoints(), q.getRubric(),
                 q.getPoints(), q.getOrigin(), q.getSkill(), q.getDifficulty())).toList();
         return new CustomAssessmentResponse(a.getId(), a.getJob().getId(), a.getTitle(), a.getLifecycle().name(),
-                a.getVersion(), a.isCurrent(), totalMarks(qs), scheme.target_total(), sections, locked,
+                a.getVersion(), a.isCurrent(), totalMarks(qs), scheme.target_total(), scheme.declaredTotal(),
+                scheme.duration_minutes(), scheme.passing_percent(), sections, locked,
                 a.getLifecycle() == AssessmentLifecycle.DRAFT && problems.isEmpty(), problems, views,
                 a.getCreatedAt(), a.getUpdatedAt());
     }

@@ -1,5 +1,6 @@
 package com.smartstaff.controller;
 
+import com.smartstaff.dto.request.BookPickRequest;
 import com.smartstaff.dto.request.CustomAssessmentCreateRequest;
 import com.smartstaff.dto.request.CustomQuestionRequest;
 import com.smartstaff.dto.request.MarkingSchemeRequest;
@@ -58,6 +59,12 @@ public class CustomAssessmentController {
     public ResponseEntity<CustomAssessmentResponse> addQuestion(@PathVariable UUID jobId, @PathVariable UUID id,
                                                                 @Valid @RequestBody CustomQuestionRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addQuestion(jobId, id, req));
+    }
+
+    @PostMapping("/{id}/questions/from-book")
+    public ResponseEntity<CustomAssessmentResponse> addFromBook(@PathVariable UUID jobId, @PathVariable UUID id,
+                                                                @Valid @RequestBody BookPickRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addFromBook(jobId, id, req.book_item_id()));
     }
 
     @PutMapping("/{id}/questions/{questionId}")

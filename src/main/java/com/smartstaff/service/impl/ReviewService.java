@@ -491,7 +491,8 @@ public class ReviewService {
         }
         long tabs = events.countByAttemptIdAndType(a.getId(), AttemptEventType.TAB_SWITCH);
         ScoringRules.Result res = ScoringRules.score(scored, PassMarkRules.effective(a.getJob().getScoringSettings(),
-                        settingsService.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel()), gateFlags, tabs,
+                        settingsService.levelPassMarks(), a.getJob().getLevelPassMarks(), a.getLevel(),
+                        PassMarkRules.paperPassing(a.getAssessment().getMarkingScheme())), gateFlags, tabs,
                 proctoring.concern(a.getId()));
         a.setTheoryScore(res.theory());
         a.setHandsOnScore(res.handsOn());

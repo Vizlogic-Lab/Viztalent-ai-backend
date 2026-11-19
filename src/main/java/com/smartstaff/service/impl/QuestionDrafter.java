@@ -125,7 +125,7 @@ public class QuestionDrafter {
             case SCENARIO -> "applied scenario (short written answer)";
             case LOGIC -> "logical reasoning";
             case ONE_WORD -> "one-word answer";
-            case PROJECT -> "project-based (longer written build or design task)";
+            case PROJECT, DEBUG -> "project-based (longer written build or design task)";
         };
     }
 
@@ -159,7 +159,7 @@ public class QuestionDrafter {
             case ONE_WORD -> "Ask for a single term, keyword, number or name that has exactly one correct answer "
                     + "(no opinions, no lists). answer is that term; accepted_answers lists other spellings or synonyms "
                     + "that mean exactly the same thing (may be empty). Explain briefly.";
-            case PROJECT -> "Set a realistic mini-project this role would deliver (build, design or migrate something), "
+            case PROJECT, DEBUG -> "Set a realistic mini-project this role would deliver (build, design or migrate something), "
                     + "answerable in writing in about " + Math.max(1, slot.timeEstimateSec() / 60) + " minutes: what to "
                     + "build, constraints and what the answer must cover. model_answer is what a strong candidate would "
                     + "write (200-300 words). rubric has 3 to 5 criteria, each with a description of what good looks "
@@ -225,7 +225,7 @@ public class QuestionDrafter {
                 props.put("accepted_answers", arr(str()));
                 props.put("explanation", str());
             }
-            case PROJECT -> {
+            case PROJECT, DEBUG -> {
                 props.put("prompt", str());
                 props.put("model_answer", str());
                 props.put("rubric", arr(obj(Map.of(
@@ -362,7 +362,7 @@ public class QuestionDrafter {
                 q.setAcceptedAnswers(accepted);
                 q.setExplanation(text(o, "explanation"));
             }
-            case PROJECT -> {
+            case PROJECT, DEBUG -> {
                 q.setPrompt(required(o, "prompt"));
                 q.setModelAnswer(text(o, "model_answer"));
                 List<RubricCriterion> rubric = new ArrayList<>();
