@@ -62,21 +62,29 @@ public class QuestionLibraryService {
 
     private static final String BOOK_SQL = """
             select 'BOOK' as source, id::text as id, type, skill, upper(difficulty) as difficulty, marks,
-                   prompt, origin, usage_count as usage
+                   prompt, origin, usage_count as usage, content::text as answer
             from question_book_items
             where 1 = 1
             """ + FILTERS;
 
     private static final String PAPER_SQL = """
             select 'PAPER' as source, id::text as id, type, skill, upper(difficulty) as difficulty,
-                   points as marks, prompt, origin, 0 as usage
+                   points as marks, prompt, origin, 0 as usage,
+                   json_build_object('options', options, 'correct_indices', correct_indices,
+                       'model_answer', model_answer, 'key_points', key_points,
+                       'accepted_answers', accepted_answers, 'buggy_code', buggy_code,
+                       'reference_solution', reference_solution, 'explanation', explanation)::text as answer
             from assessment_questions
             where 1 = 1
             """ + FILTERS;
 
     private static final String HR_SQL = """
             select 'HR' as source, id::text as id, type, skill, upper(difficulty) as difficulty,
-                   points as marks, prompt, coalesce(source, 'HR') as origin, 0 as usage
+                   points as marks, prompt, coalesce(source, 'HR') as origin, 0 as usage,
+                   json_build_object('options', options, 'correct_indices', correct_indices,
+                       'model_answer', model_answer, 'key_points', key_points,
+                       'buggy_code', buggy_code, 'reference_solution', reference_solution,
+                       'explanation', explanation)::text as answer
             from question_bank_items
             where 1 = 1
             """ + FILTERS;
