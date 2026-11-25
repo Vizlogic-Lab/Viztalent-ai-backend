@@ -58,4 +58,9 @@ public interface SettingsService {
 
     /** Calling-code prefixes place_call may dial, e.g. ["+91"] (setting twilio_allowed_country_codes). */
     java.util.List<String> getTwilioAllowedCountryCodes();
+
+    /** Admin-chosen step-2 screening rule (setting screening_pass_rule), default EITHER. */
+    com.smartstaff.util.ScreeningDecision.Rule getScreeningRule();
+
+    void saveScreeningRule(com.smartstaff.util.ScreeningDecision.Rule rule, User admin);
 }

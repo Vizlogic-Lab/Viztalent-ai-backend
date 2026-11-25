@@ -117,8 +117,12 @@ class InterviewIntegrationTest extends IntegrationTestBase {
 
         prepare(Map.of("session_id", job, "file_name", "priya.txt"));
 
-        String prompt = json.readTree(STUB.requests("/v1beta/models/").get(0).body())
-                .path("contents").get(0).path("parts").get(0).path("text").asText();
+        // Screening also sends an AI CV-match request; pick the interview prompt.
+        String prompt = "";
+        for (var req : STUB.requests("/v1beta/models/")) {
+            String text = json.readTree(req.body()).path("contents").get(0).path("parts").get(0).path("text").asText();
+            if (text.contains("matched these skills")) prompt = text;
+        }
         assertThat(prompt).contains("Priya Nair").contains("matched these skills").contains("java").contains("Years of experience: 7");
     }
 

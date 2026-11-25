@@ -46,6 +46,7 @@ public class ScreeningServiceImpl implements ScreeningService {
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
     private final ActivityRecorder activity;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public ScreeningServiceImpl(
             JobRepository jobRepository,
@@ -54,9 +55,11 @@ public class ScreeningServiceImpl implements ScreeningService {
             CandidateMapper candidateMapper,
             SkillDictionary skillDictionary,
             ExperienceParser experienceParser,
-            ActivityRecorder activity
+            ActivityRecorder activity,
+            org.springframework.context.ApplicationEventPublisher events
     ) {
         this.activity = activity;
+        this.events = events;
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
         this.candidateRepository = candidateRepository;
@@ -80,7 +83,13 @@ public class ScreeningServiceImpl implements ScreeningService {
 
         // Re-running screening recomputes everyone from scratch, so edits to
         // the JD or newly-added resumes are always reflected.
+        // ...but a recruiter's override (and its reason) is kept for the same resume.
+        Map<String, Candidate> previousOverrides = new HashMap<>();
+        for (Candidate old : candidateRepository.findByJobIdOrderByFitScoreDesc(jobId)) {
+            if (old.isOverridePassed()) previousOverrides.put(old.getResume().getFilename(), old);
+        }
         candidateRepository.deleteByJobId(jobId);
+        candidateRepository.flush();
 
         // effectiveRequired: fall back to every skill when the JD has no
         // must-have skills at all (e.g. a skills-only JD where everything
@@ -91,25 +100,79 @@ public class ScreeningServiceImpl implements ScreeningService {
 
         List<Candidate> scored = new ArrayList<>();
         for (Resume resume : resumes) {
-            scored.add(scoreCandidate(job, resume, required, niceToHave));
+            Candidate c = scoreCandidate(job, resume, required, niceToHave);
+            Candidate prev = previousOverrides.get(resume.getFilename());
+            if (prev != null) {
+                c.setOverridePassed(true);
+                c.setOverrideReason(prev.getOverrideReason());
+                c.setOverrideBy(prev.getOverrideBy());
+                c.setOverrideAt(prev.getOverrideAt());
+            }
+            scored.add(c);
         }
+        // Step 1 gate: only candidates inside the experience range (or with no years found)
+        // go on to the step-2 AI match.
+        AiMatchJob.markPending(scored.stream().filter(c -> !"FAIL".equals(c.getExperienceStatus())).toList());
+        scored.stream().filter(c -> "FAIL".equals(c.getExperienceStatus()))
+                .forEach(c -> c.setAiMatchStatus(AiMatchJob.SKIPPED));
         candidateRepository.saveAll(scored);
+        // The AI (meaning-based) match runs in the background after this commits.
+        events.publishEvent(new com.smartstaff.service.AiMatchRequestedEvent(jobId));
 
         // Highest score first, matching the frontend's own sort of the table.
         scored.sort(Comparator.comparingInt(Candidate::getFitScore).reversed());
         List<CandidateRowResponse> rows = scored.stream().map(candidateMapper::toRowResponse).toList();
 
-        int shortlisted = (int) scored.stream().filter(c -> c.getFitScore() >= 50).count();
+        int expFailed = (int) scored.stream().filter(c -> "FAIL".equals(c.getExperienceStatus())).count();
         String reply = "Screened " + scored.size() + " candidate" + (scored.size() == 1 ? "" : "s")
-                + " — " + shortlisted + " scored 50 or above.";
+                + " — step 1 (experience): " + (scored.size() - expFailed) + " passed, " + expFailed + " outside the range."
+                + (scored.size() - expFailed > 0 ? " Step 2 (skills + AI match) is running now." : "");
         activity.record(jobId, ActivityRecorder.SCREENING, reply, null);
 
         return new RunScreeningResponse(reply, rows);
     }
 
     @Override
+    @Transactional
+    public int requestAiMatch(UUID jobId) {
+        List<Candidate> list = candidateRepository.findByJobIdOrderByFitScoreDesc(jobId).stream()
+                .filter(c -> !"FAIL".equals(c.getExperienceStatus())).toList();
+        AiMatchJob.markPending(list);
+        events.publishEvent(new com.smartstaff.service.AiMatchRequestedEvent(jobId));
+        return list.size();
+    }
+
+    @Override
     public ProgressResponse progress() {
         return ProgressResponse.IDLE;
+    }
+
+    @Override
+    @Transactional
+    public CandidateRowResponse overrideCandidate(UUID jobId, String fileName, boolean passed, String reason, User by) {
+        Candidate c = candidateRepository.findByJobIdAndResumeFilename(jobId, fileName)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Candidate not found for this job."));
+        if (passed) {
+            String why = reason == null ? "" : reason.trim();
+            if (why.length() < 3) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Please write a reason for passing this candidate.", "reason_required");
+            }
+            if (why.length() > 2000) why = why.substring(0, 2000);
+            c.setOverridePassed(true);
+            c.setOverrideReason(why);
+            c.setOverrideBy(by == null ? null : by.publicId());
+            c.setOverrideAt(java.time.Instant.now());
+            activity.record(jobId, ActivityRecorder.SCREENING,
+                    "Recruiter passed " + c.getCandidateName() + " at screening: " + why, null);
+        } else {
+            c.setOverridePassed(false);
+            c.setOverrideReason(null);
+            c.setOverrideBy(null);
+            c.setOverrideAt(null);
+            activity.record(jobId, ActivityRecorder.SCREENING,
+                    "Recruiter removed the screening override for " + c.getCandidateName(), null);
+        }
+        return candidateMapper.toRowResponse(c);
     }
 
     // ── scoring ──────────────────────────────────────────────────────────
@@ -130,12 +193,11 @@ public class ScreeningServiceImpl implements ScreeningService {
                 : (double) matchedNice.size() / niceToHave.size() * NICE_TO_HAVE_WEIGHT;
 
         int years = experienceParser.extractYearsOfExperience(text);
-        int experienceBonus = 0;
-        if (job.getExperienceMinYears() != null) {
-            experienceBonus = years >= job.getExperienceMinYears() ? EXPERIENCE_BONUS : -EXPERIENCE_BONUS;
-        }
+        // Experience is now its own step (the gate), so it no longer nudges the skill score.
+        String experienceStatus = com.smartstaff.util.ScreeningDecision.experienceStatus(
+                years, job.getExperienceMinYears(), job.getExperienceMaxYears());
 
-        int fitScore = clamp((int) Math.round(requiredScore + niceScore) + experienceBonus, 0, 100);
+        int fitScore = clamp((int) Math.round(requiredScore + niceScore), 0, 100);
 
         List<String> allMatched = new ArrayList<>(matchedRequired);
         allMatched.addAll(matchedNice);
@@ -155,6 +217,7 @@ public class ScreeningServiceImpl implements ScreeningService {
         candidate.setEmail(firstMatch(EMAIL, text));
         candidate.setPhone(firstMatch(PHONE, text));
         candidate.setYearsExperience(years);
+        candidate.setExperienceStatus(experienceStatus);
         candidate.setFitScore(fitScore);
         candidate.setMatchedSkills(allMatched);
         candidate.setMissingSkills(missingRequired);

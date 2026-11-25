@@ -34,6 +34,7 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String KEY_PUBLIC_BASE_URL = "public_base_url";
     private static final String KEY_INVITE_TTL_SECONDS = "invite_ttl_seconds";
     private static final String KEY_LEVEL_PASS_MARKS = "level_pass_marks";
+    private static final String KEY_SCREENING_RULE = "screening_pass_rule";
     private static final String KEY_TWILIO_SID = "twilio_account_sid";
     private static final String KEY_TWILIO_TOKEN = "twilio_auth_token";
     private static final String KEY_TWILIO_FROM = "twilio_from_number";
@@ -307,6 +308,31 @@ public class SettingsServiceImpl implements SettingsService {
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    /** The rule is read for every candidate row the API returns, so it is cached briefly.
+     *  Saving here clears the cache at once; a change made on another server instance
+     *  shows up within RULE_CACHE_MILLIS. */
+    private static final long RULE_CACHE_MILLIS = 10_000;
+    private volatile com.smartstaff.util.ScreeningDecision.Rule cachedRule;
+    private volatile long cachedRuleAt;
+
+    @Override
+    public com.smartstaff.util.ScreeningDecision.Rule getScreeningRule() {
+        var rule = cachedRule;
+        if (rule != null && System.currentTimeMillis() - cachedRuleAt < RULE_CACHE_MILLIS) return rule;
+        rule = com.smartstaff.util.ScreeningDecision.Rule.parse(plain(KEY_SCREENING_RULE).orElse(null));
+        cachedRule = rule;
+        cachedRuleAt = System.currentTimeMillis();
+        return rule;
+    }
+
+    @Override
+    @Transactional
+    public void saveScreeningRule(com.smartstaff.util.ScreeningDecision.Rule rule, User admin) {
+        put(KEY_SCREENING_RULE, rule.name(), admin);
+        cachedRule = rule;
+        cachedRuleAt = System.currentTimeMillis();
+    }
 
     private void put(String key, String value, User admin) {
         AppSetting setting = settings.findById(key).orElse(new AppSetting());

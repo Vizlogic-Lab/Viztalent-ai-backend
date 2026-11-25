@@ -38,6 +38,38 @@ class ExperienceParserTest {
     }
 
     @Test
+    @DisplayName("resume years: numbers not tied to experience are ignored")
+    void resumeYearsNeedsExperienceContext() {
+        java.time.YearMonth now = java.time.YearMonth.of(2026, 11);
+        assertThat(parser.extractYearsOfExperience("Product carries a 10 years warranty.", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("Delivered the migration within 2 years.", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("Experience: 6.5 years in Java", now)).isEqualTo(6);
+        assertThat(parser.extractYearsOfExperience("Total experience - 4 yrs", now)).isEqualTo(4);
+        assertThat(parser.extractYearsOfExperience("8 years as a backend developer", now)).isEqualTo(8);
+        assertThat(parser.extractYearsOfExperience("5 years of professional experience", now)).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("resume years: falls back to work-history dates, merging overlaps, skipping education")
+    void resumeYearsFromDates() {
+        java.time.YearMonth now = java.time.YearMonth.of(2026, 11);
+        String cv = """
+                Software Engineer, Acme   Jan 2019 - Present
+                Intern, Beta              Jun 2018 – Dec 2018
+                B.Tech, XYZ University    2014 - 2018
+                """;
+        // Jun 2018 -> Dec 2018 (6 months) + Jan 2019 -> Nov 2026 (94 months) = 100 months = 8 years
+        assertThat(parser.extractYearsOfExperience(cv, now)).isEqualTo(8);
+        // Overlapping jobs are not double-counted: 2020-2024 and 2022-2026 = 2020..2026 = 6 years
+        assertThat(parser.extractYearsOfExperience("Acme 2020 - 2024\nBeta 2022 - 2026", now)).isEqualTo(6);
+        assertThat(parser.extractYearsOfExperience("Developer 06/2021 to till date", now)).isEqualTo(5);
+        // A stated total wins over dates
+        assertThat(parser.extractYearsOfExperience("3 years of experience\nAcme 2015 - Present", now)).isEqualTo(3);
+        // Only education dates -> not found
+        assertThat(parser.extractYearsOfExperience("MCA, ABC College 2022 - 2024", now)).isZero();
+    }
+
+    @Test
     @DisplayName("resume years: ignores absurd numbers and blank input")
     void resumeYearsGuards() {
         assertThat(parser.extractYearsOfExperience("99 years of experience")).isZero();
