@@ -85,7 +85,8 @@ public class SectionDrafter {
         if (!jd.isBlank()) sb.append("Job description excerpt:\n").append(jd).append("\n\n");
         sb.append("Every question: ").append(QuestionDrafter.instructions(slot)).append('\n')
                 .append("Set \"scope\" to GENERIC unless a question depends on this company's internal details.\n")
-                .append("Avoid well-known puzzles and textbook trivia; use situations from this role. No placeholders.\n");
+                .append(style(r.type()))
+                .append("No placeholders.\n");
         if (!r.existingPrompts().isEmpty()) {
             sb.append("Do NOT repeat or rephrase any of these existing questions:\n");
             for (String p : r.existingPrompts()) {
@@ -157,6 +158,19 @@ public class SectionDrafter {
     private static Blueprint.Slot slot(Request r, int seq) {
         return new Blueprint.Slot(seq, r.type(), r.type().competency(), r.type().dimension(), r.marks(), r.difficulty(),
                 null, CustomAssessmentService.timeEstimate(r.type()), false);
+    }
+
+    /** Keep generated questions short and direct: recruiters found long, story-style questions hard to use. */
+    static String style(QuestionType type) {
+        return switch (type) {
+            case MCQ, ONE_WORD -> "Write each question as ONE short, direct sentence (at most 25 words) that asks "
+                    + "about a single concept, e.g. \"Which annotation marks a Spring REST controller?\". "
+                    + "No stories, no long setups, no code blocks. Keep options short (a few words each). "
+                    + "Test what the role uses every day; avoid trick questions and rare edge cases.\n";
+            case SCENARIO -> "Keep the question short and direct: at most 3 sentences (about 60 words) describing one "
+                    + "common situation from this role, then one clear question. Avoid rare edge cases.\n";
+            default -> "Keep the task statement clear and to the point: at most 120 words. Ask for one thing.\n";
+        };
     }
 
     static String label(QuestionType type) {
