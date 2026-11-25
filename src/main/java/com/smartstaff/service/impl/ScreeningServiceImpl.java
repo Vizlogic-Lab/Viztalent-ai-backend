@@ -180,9 +180,14 @@ public class ScreeningServiceImpl implements ScreeningService {
     private Candidate scoreCandidate(Job job, Resume resume, List<String> required, List<String> niceToHave) {
         String text = resume.getExtractedText() == null ? "" : resume.getExtractedText();
 
-        List<String> resumeSkills = skillDictionary.extract(text);
-        List<String> matchedRequired = intersect(required, resumeSkills);
-        List<String> matchedNice = intersect(niceToHave, resumeSkills);
+        // Each JD skill is looked for in the CV text by name and by the aliases the AI JD read gave
+        // (e.g. "stakeholder management" also matches "stakeholders"), so any skill works, not only
+        // the ones in the fixed skill list.
+        var aliases = job.getSkillAliases();
+        List<String> matchedRequired = required.stream()
+                .filter(s -> com.smartstaff.util.SkillMatcher.matches(text, s, aliases)).toList();
+        List<String> matchedNice = niceToHave.stream()
+                .filter(s -> com.smartstaff.util.SkillMatcher.matches(text, s, aliases)).toList();
         List<String> missingRequired = required.stream()
                 .filter(s -> matchedRequired.stream().noneMatch(s::equalsIgnoreCase))
                 .toList();

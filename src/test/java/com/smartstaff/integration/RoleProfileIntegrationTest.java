@@ -70,7 +70,9 @@ class RoleProfileIntegrationTest extends IntegrationTestBase {
         assertThat(p.path("skill_weights").path("excel").asInt()).isEqualTo(3);
         assertThat(p.path("skill_weights").has("kubernetes")).as("not in the JD, so dropped").isFalse();
 
-        var calls = STUB.requests("/v1beta/models/");
+        // Upload also sends the JD skill read; pick the one role-profile request.
+        var calls = STUB.requests("/v1beta/models/").stream()
+                .filter(r -> r.body().contains("role_family")).toList();
         assertThat(calls).hasSize(1);
         JsonNode sent = json.readTree(calls.get(0).body());
         assertThat(sent.path("generationConfig").path("responseSchema").path("properties").has("role_family")).isTrue();

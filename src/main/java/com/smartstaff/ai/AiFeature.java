@@ -13,6 +13,7 @@ public enum AiFeature {
     SUMMARY(false),
     RECRUITER_CHAT(false),
     CV_MATCH(false),
+    JD_SKILLS(false),
     CONNECTION_TEST(true);
 
     private final boolean critical;

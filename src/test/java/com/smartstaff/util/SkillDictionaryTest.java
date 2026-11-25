@@ -74,4 +74,11 @@ class SkillDictionaryTest {
         assertThat(result.mustHave()).contains("java");
         assertThat(result.niceToHave()).contains("terraform");
     }
+
+    @org.junit.jupiter.api.Test
+    void idealAndAdvantageWordingIsNiceToHave() {
+        var result = dictionary.classify("Coordinate integration testing with Jira. Ideally, experience in SAP and Workday. German is an advantage; Confluence is desirable.");
+        org.assertj.core.api.Assertions.assertThat(result.mustHave()).contains("jira");
+        org.assertj.core.api.Assertions.assertThat(result.niceToHave()).contains("sap", "workday", "confluence");
+    }
 }

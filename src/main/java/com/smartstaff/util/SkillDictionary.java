@@ -61,7 +61,9 @@ public class SkillDictionary {
     }
 
     private static final List<String> OPTIONAL_PHRASES = List.of(
-            "nice to have", "preferred", "good to have", "bonus", "a plus", "is a plus", "plus point");
+            "nice to have", "preferred", "good to have", "bonus", "a plus", "is a plus", "plus point",
+            "ideally", "ideal candidate", "an advantage", "is an advantage", "advantageous", "desirable",
+            "beneficial", "optional", "would be great");
 
     // Sentence/clause boundary — a fixed character window bleeds a qualifier
     // phrase from one sentence into a skill mentioned in an unrelated,

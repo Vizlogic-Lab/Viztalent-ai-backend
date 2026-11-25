@@ -144,3 +144,23 @@ active directory
 vmware
 windows server
 itil
+workday
+successfactors
+project management
+project coordination
+program management
+pmo
+pmp
+prince2
+stakeholder management
+risk management
+vendor management
+change management
+status reporting
+budgeting
+ms project
+business analysis
+requirements gathering
+test management
+release management
+sap s/4hana
