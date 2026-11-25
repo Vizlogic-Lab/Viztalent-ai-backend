@@ -16,5 +16,10 @@ public record CandidateRowResponse(
         String Key_Strengths,
         String Missing_Skills,
         String Score_Breakdown,
-        String Job_Id
+        String Job_Id,
+        Integer AI_Match_Score,
+        String AI_Match_Status,
+        String AI_Match_Summary,
+        String AI_Match_Strengths,
+        String AI_Match_Gaps
 ) {}

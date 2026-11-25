@@ -20,7 +20,12 @@ public class CandidateMapper {
                 String.join(", ", c.getMatchedSkills()),
                 String.join(", ", c.getMissingSkills()),
                 c.getScoreBreakdown(),
-                c.getJob().getId().toString()
+                c.getJob().getId().toString(),
+                c.getAiMatchScore(),
+                c.getAiMatchStatus(),
+                c.getAiMatchSummary(),
+                c.getAiMatchStrengths() == null ? "" : String.join("; ", c.getAiMatchStrengths()),
+                c.getAiMatchGaps() == null ? "" : String.join("; ", c.getAiMatchGaps())
         );
     }
 }

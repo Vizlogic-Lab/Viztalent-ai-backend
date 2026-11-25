@@ -12,6 +12,7 @@ public enum AiFeature {
     ROLE_PROFILE(false),
     SUMMARY(false),
     RECRUITER_CHAT(false),
+    CV_MATCH(false),
     CONNECTION_TEST(true);
 
     private final boolean critical;

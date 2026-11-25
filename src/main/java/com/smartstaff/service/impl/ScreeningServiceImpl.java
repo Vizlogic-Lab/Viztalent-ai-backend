@@ -46,6 +46,7 @@ public class ScreeningServiceImpl implements ScreeningService {
     private final SkillDictionary skillDictionary;
     private final ExperienceParser experienceParser;
     private final ActivityRecorder activity;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public ScreeningServiceImpl(
             JobRepository jobRepository,
@@ -54,9 +55,11 @@ public class ScreeningServiceImpl implements ScreeningService {
             CandidateMapper candidateMapper,
             SkillDictionary skillDictionary,
             ExperienceParser experienceParser,
-            ActivityRecorder activity
+            ActivityRecorder activity,
+            org.springframework.context.ApplicationEventPublisher events
     ) {
         this.activity = activity;
+        this.events = events;
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
         this.candidateRepository = candidateRepository;
@@ -93,7 +96,10 @@ public class ScreeningServiceImpl implements ScreeningService {
         for (Resume resume : resumes) {
             scored.add(scoreCandidate(job, resume, required, niceToHave));
         }
+        AiMatchJob.markPending(scored);
         candidateRepository.saveAll(scored);
+        // The AI (meaning-based) match runs in the background after this commits.
+        events.publishEvent(new com.smartstaff.service.AiMatchRequestedEvent(jobId));
 
         // Highest score first, matching the frontend's own sort of the table.
         scored.sort(Comparator.comparingInt(Candidate::getFitScore).reversed());
@@ -105,6 +111,15 @@ public class ScreeningServiceImpl implements ScreeningService {
         activity.record(jobId, ActivityRecorder.SCREENING, reply, null);
 
         return new RunScreeningResponse(reply, rows);
+    }
+
+    @Override
+    @Transactional
+    public int requestAiMatch(UUID jobId) {
+        List<Candidate> list = candidateRepository.findByJobIdOrderByFitScoreDesc(jobId);
+        AiMatchJob.markPending(list);
+        events.publishEvent(new com.smartstaff.service.AiMatchRequestedEvent(jobId));
+        return list.size();
     }
 
     @Override

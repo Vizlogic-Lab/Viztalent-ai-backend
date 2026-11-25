@@ -24,7 +24,7 @@ import java.util.*;
 public class ReportXlsxService {
 
     static final List<String> CANDIDATE_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Phone",
-            "Years Experience", "Fit Score", "Matched Skills", "Missing Skills",
+            "Years Experience", "Fit Score", "AI Match", "AI View", "Matched Skills", "Missing Skills",
             "Assessment Level", "Theory", "Hands-on", "Overall", "Recommendation", "Result Status");
     static final List<String> ASSESSMENT_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Level", "Version",
             "Status", "Submitted", "Theory", "Theory Band", "Hands-on", "Hands-on Band", "Overall", "Recommendation",
@@ -67,6 +67,8 @@ public class ReportXlsxService {
                     AssessmentAttempt latest = latestScored(jobAttempts, c.getEmail());
                     row(cand, job.jdNumberDisplay(), job.getTitle(), c.getCandidateName(), c.getEmail(), c.getPhone(),
                             c.getYearsExperience(), c.getFitScore(),
+                            "DONE".equals(c.getAiMatchStatus()) ? c.getAiMatchScore() : null,
+                            "DONE".equals(c.getAiMatchStatus()) ? c.getAiMatchSummary() : null,
                             String.join("; ", c.getMatchedSkills()), String.join("; ", c.getMissingSkills()),
                             latest == null ? null : latest.getLevel(),
                             latest == null ? null : latest.getTheoryScore(),

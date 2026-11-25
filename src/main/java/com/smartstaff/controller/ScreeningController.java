@@ -41,6 +41,14 @@ public class ScreeningController {
         return ResponseEntity.ok(screeningService.runScreening(jobId));
     }
 
+    /** Re-score the job's candidates with the AI match only; the keyword score is unchanged. */
+    @PostMapping("/api/ai_match")
+    @PreAuthorize("@jobAccess.canAccessSession(#req.session_id(), authentication)")
+    public ResponseEntity<java.util.Map<String, Object>> aiMatch(@Valid @RequestBody RunScreeningRequest req) {
+        int n = screeningService.requestAiMatch(parseJobId(req.session_id()));
+        return ResponseEntity.ok(java.util.Map.of("queued", n));
+    }
+
     @GetMapping("/api/progress")
     public ResponseEntity<ProgressResponse> progress() {
         return ResponseEntity.ok(screeningService.progress());
