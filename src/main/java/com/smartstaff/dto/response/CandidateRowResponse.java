@@ -21,5 +21,13 @@ public record CandidateRowResponse(
         String AI_Match_Status,
         String AI_Match_Summary,
         String AI_Match_Strengths,
-        String AI_Match_Gaps
+        String AI_Match_Gaps,
+        String Experience_Status,
+        String Screening_Decision,
+        String Screening_Step,
+        String Screening_Reason,
+        boolean Override_Passed,
+        String Override_Reason,
+        String Override_By,
+        String Override_At
 ) {}

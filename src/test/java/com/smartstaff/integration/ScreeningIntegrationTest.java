@@ -141,7 +141,7 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
         assertThat(asha.path("Fit_Score_Out_Of_100").asInt()).isLessThan(50);
         assertThat(asha.path("Matched_Count").asInt()).isZero();
 
-        assertThat(result.path("reply").asText()).contains("Screened 3 candidates").contains("2 scored 50 or above");
+        assertThat(result.path("reply").asText()).contains("Screened 3 candidates").contains("step 1 (experience)");
     }
 
     @Test
@@ -211,7 +211,7 @@ class ScreeningIntegrationTest extends IntegrationTestBase {
         // F14: the services write the feed — one event per upload / screening run, newest first.
         uploadResumes(owner, job, "b.txt", PRIYA, "c.txt", PRIYA).andExpect(status().isOk());
         assertThat(bodyOf(getAs(owner, "/api/activity/" + job)).path("activity").findValuesAsText("message"))
-                .containsExactly("2 resumes uploaded", "Screened 1 candidate — 1 scored 50 or above.",
+                .containsExactly("2 resumes uploaded", "Screened 1 candidate — step 1 (experience): 1 passed, 0 outside the range. Step 2 (skills + AI match) is running now.",
                         "Resume uploaded: a.txt", "JD uploaded: Senior Java Developer");
 
         // The frontend opens this as a plain <a href> with no bearer token, so it signs the path first.

@@ -49,6 +49,22 @@ public class ScreeningController {
         return ResponseEntity.ok(java.util.Map.of("queued", n));
     }
 
+    /** Recruiter override after discussion: body {file_name, passed, reason}. A reason is required to pass. */
+    @PostMapping("/api/jobs/{jobId}/candidates/override")
+    // Admins and the job's owner (the employer) only; reviewers never override screening.
+    @PreAuthorize("hasAnyRole('ADMIN','USER') and @jobAccess.canAccessJob(#jobId, authentication)")
+    public ResponseEntity<com.smartstaff.dto.response.CandidateRowResponse> overrideCandidate(
+            @PathVariable UUID jobId, @RequestBody java.util.Map<String, Object> body,
+            @AuthenticationPrincipal User requester) {
+        String fileName = body == null ? null : (String) body.get("file_name");
+        if (fileName == null || fileName.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "file_name is required");
+        }
+        boolean passed = !Boolean.FALSE.equals(body.get("passed"));
+        String reason = body.get("reason") == null ? null : String.valueOf(body.get("reason"));
+        return ResponseEntity.ok(screeningService.overrideCandidate(jobId, fileName, passed, reason, requester));
+    }
+
     @GetMapping("/api/progress")
     public ResponseEntity<ProgressResponse> progress() {
         return ResponseEntity.ok(screeningService.progress());

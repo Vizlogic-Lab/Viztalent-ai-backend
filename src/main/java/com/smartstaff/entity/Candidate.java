@@ -85,6 +85,23 @@ public class Candidate {
     @Column(name = "ai_match_gaps", columnDefinition = "jsonb")
     private List<String> aiMatchGaps = new ArrayList<>();
 
+    /** Step 1 (experience gate): PASS, FAIL (outside the JD range) or UNKNOWN (no years on the CV). */
+    @Column(name = "experience_status")
+    private String experienceStatus;
+
+    /** Recruiter passed this candidate despite a failed step; the reason is required. */
+    @Column(name = "override_passed", nullable = false)
+    private boolean overridePassed;
+
+    @Column(name = "override_reason", columnDefinition = "TEXT")
+    private String overrideReason;
+
+    @Column(name = "override_by")
+    private String overrideBy;
+
+    @Column(name = "override_at")
+    private Instant overrideAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

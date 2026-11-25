@@ -25,7 +25,9 @@ public class AiMatchJob {
 
     private static final Logger log = LoggerFactory.getLogger(AiMatchJob.class);
 
-    public static final String PENDING = "PENDING", DONE = "DONE", FAILED = "FAILED", OFF = "OFF";
+    public static final String PENDING = "PENDING", DONE = "DONE", FAILED = "FAILED", OFF = "OFF",
+            /** Not AI-matched because the candidate failed step 1 (experience). */
+            SKIPPED = "SKIPPED";
 
     private final CandidateRepository candidates;
     private final SettingsService settings;

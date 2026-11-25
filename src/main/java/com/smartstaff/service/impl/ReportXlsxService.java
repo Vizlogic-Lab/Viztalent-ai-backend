@@ -24,7 +24,8 @@ import java.util.*;
 public class ReportXlsxService {
 
     static final List<String> CANDIDATE_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Phone",
-            "Years Experience", "Fit Score", "AI Match", "AI View", "Matched Skills", "Missing Skills",
+            "Years Experience", "Fit Score", "AI Match", "AI View", "Screening Decision", "Screening Reason",
+            "Override Reason", "Overridden By", "Matched Skills", "Missing Skills",
             "Assessment Level", "Theory", "Hands-on", "Overall", "Recommendation", "Result Status");
     static final List<String> ASSESSMENT_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Level", "Version",
             "Status", "Submitted", "Theory", "Theory Band", "Hands-on", "Hands-on Band", "Overall", "Recommendation",
@@ -33,8 +34,11 @@ public class ReportXlsxService {
     private final JobRepository jobs;
     private final CandidateRepository candidates;
     private final AssessmentAttemptRepository attempts;
+    private final com.smartstaff.service.SettingsService settings;
 
-    public ReportXlsxService(JobRepository jobs, CandidateRepository candidates, AssessmentAttemptRepository attempts) {
+    public ReportXlsxService(JobRepository jobs, CandidateRepository candidates, AssessmentAttemptRepository attempts,
+                             com.smartstaff.service.SettingsService settings) {
+        this.settings = settings;
         this.jobs = jobs;
         this.candidates = candidates;
         this.attempts = attempts;
@@ -52,6 +56,7 @@ public class ReportXlsxService {
             bold.setFont(font);
             Sheet cand = sheet(wb, "Candidates", CANDIDATE_HEADERS, bold);
             Sheet asmt = sheet(wb, "Assessments", ASSESSMENT_HEADERS, bold);
+            com.smartstaff.util.ScreeningDecision.Rule rule = settings.getScreeningRule();
 
             for (Job job : visible) {
                 List<AssessmentAttempt> jobAttempts = attempts.findByJobIdOrderByStartedAtDesc(job.getId());
@@ -64,11 +69,15 @@ public class ReportXlsxService {
                             String.join(", ", a.getFlags()));
                 }
                 for (Candidate c : candidates.findByJobIdOrderByFitScoreDesc(job.getId())) {
+                    var decision = com.smartstaff.util.ScreeningDecision.decide(c, rule);
                     AssessmentAttempt latest = latestScored(jobAttempts, c.getEmail());
                     row(cand, job.jdNumberDisplay(), job.getTitle(), c.getCandidateName(), c.getEmail(), c.getPhone(),
                             c.getYearsExperience(), c.getFitScore(),
                             "DONE".equals(c.getAiMatchStatus()) ? c.getAiMatchScore() : null,
                             "DONE".equals(c.getAiMatchStatus()) ? c.getAiMatchSummary() : null,
+                            decision.decision(), decision.reason(),
+                            c.isOverridePassed() ? c.getOverrideReason() : null,
+                            c.isOverridePassed() ? c.getOverrideBy() : null,
                             String.join("; ", c.getMatchedSkills()), String.join("; ", c.getMissingSkills()),
                             latest == null ? null : latest.getLevel(),
                             latest == null ? null : latest.getTheoryScore(),

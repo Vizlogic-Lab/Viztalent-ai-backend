@@ -13,4 +13,8 @@ public interface ScreeningService {
     int requestAiMatch(UUID jobId);
 
     ProgressResponse progress();
+
+    /** Recruiter override: pass (or undo the pass of) one candidate. Passing needs a reason. */
+    com.smartstaff.dto.response.CandidateRowResponse overrideCandidate(
+            UUID jobId, String fileName, boolean passed, String reason, com.smartstaff.entity.User by);
 }

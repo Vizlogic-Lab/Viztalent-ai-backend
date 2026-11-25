@@ -47,6 +47,28 @@ public class SettingsController {
         return settingsService.levelPassMarks();
     }
 
+    /** Step-2 screening pass rule: EITHER, BOTH, AI_ONLY or KEYWORD_ONLY. Anyone signed in may read it. */
+    @GetMapping("/api/config/screening_rule")
+    public java.util.Map<String, String> screeningRule() {
+        return java.util.Map.of("rule", settingsService.getScreeningRule().name());
+    }
+
+    @PutMapping("/api/config/screening_rule")
+    @PreAuthorize("hasRole('ADMIN')")
+    public java.util.Map<String, String> saveScreeningRule(@RequestBody java.util.Map<String, String> body,
+                                                          @AuthenticationPrincipal User admin) {
+        String raw = body == null ? null : body.get("rule");
+        com.smartstaff.util.ScreeningDecision.Rule rule;
+        try {
+            rule = com.smartstaff.util.ScreeningDecision.Rule.valueOf(String.valueOf(raw).trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new com.smartstaff.exception.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "rule must be EITHER, BOTH, AI_ONLY or KEYWORD_ONLY");
+        }
+        settingsService.saveScreeningRule(rule, admin);
+        return java.util.Map.of("rule", rule.name());
+    }
+
     @PostMapping("/api/config/public_url")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PublicUrlSaveResponse> savePublicUrl(@Valid @RequestBody PublicUrlRequest req, @AuthenticationPrincipal User admin) {
