@@ -38,6 +38,14 @@ class ExperienceParserTest {
     }
 
     @Test
+    @DisplayName("JD range: 'several years of experience' reads as at least 3")
+    void severalYears() {
+        assertThat(parser.extractRange("Several years of professional experience in project management"))
+                .isEqualTo(new ExperienceParser.Range(3, null));
+        assertThat(parser.extractRange("We have grown for several years.")).isEqualTo(new ExperienceParser.Range(null, null));
+    }
+
+    @Test
     @DisplayName("resume years: numbers not tied to experience are ignored")
     void resumeYearsNeedsExperienceContext() {
         java.time.YearMonth now = java.time.YearMonth.of(2026, 11);

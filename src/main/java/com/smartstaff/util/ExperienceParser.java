@@ -15,6 +15,8 @@ public class ExperienceParser {
 
     private static final Pattern RANGE = Pattern.compile(
             "(\\d{1,2})\\s*(?:-|to|–)\\s*(\\d{1,2})\\s*\\+?\\s*years?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SEVERAL_YEARS = Pattern.compile(
+            "\\b(?:several|multiple)\\s+years\\b[^.\\n]{0,40}?\\bexperience", Pattern.CASE_INSENSITIVE);
     private static final Pattern MINIMUM = Pattern.compile(
             "(\\d{1,2})\\s*\\+\\s*years?", Pattern.CASE_INSENSITIVE);
     // Resume phrasing: "5 years of experience", "3 yrs exp", "7+ years in Java", "8 years as a ...".
@@ -61,6 +63,8 @@ public class ExperienceParser {
             int minYears = Integer.parseInt(min.group(1));
             return new Range(minYears, null);
         }
+        // "Several years of experience" gives no number; read it as at least 3.
+        if (SEVERAL_YEARS.matcher(text).find()) return new Range(3, null);
         return Range.NONE;
     }
 

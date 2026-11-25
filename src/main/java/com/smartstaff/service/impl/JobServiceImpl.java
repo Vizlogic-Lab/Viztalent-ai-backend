@@ -51,6 +51,8 @@ public class JobServiceImpl implements JobService {
     private final ApplicationEventPublisher events;
     private final RoleProfileService roleProfileService;
     private final ActivityRecorder activity;
+    private final JdSkillExtractor jdSkillExtractor;
+    private final com.smartstaff.service.SettingsService settings;
 
     public JobServiceImpl(
             JobRepository jobRepository,
@@ -65,9 +67,13 @@ public class JobServiceImpl implements JobService {
             @Value("${app.jobs.max-retained}") int maxRetainedJobs,
             ApplicationEventPublisher events,
             RoleProfileService roleProfileService,
-            ActivityRecorder activity
+            ActivityRecorder activity,
+            JdSkillExtractor jdSkillExtractor,
+            com.smartstaff.service.SettingsService settings
     ) {
         this.activity = activity;
+        this.jdSkillExtractor = jdSkillExtractor;
+        this.settings = settings;
         this.jobRepository = jobRepository;
         this.resumeRepository = resumeRepository;
         this.candidateRepository = candidateRepository;
@@ -102,8 +108,7 @@ public class JobServiceImpl implements JobService {
         }
 
         String text = extractTextBestEffort(bytes, file.getOriginalFilename());
-        var classified = skillDictionary.classify(text);
-        var experience = experienceParser.extractRange(text);
+        JdSkills read = readSkills(text);
 
         String storedPath = storeFile(file, "jobs/" + UUID.randomUUID());
 
@@ -113,10 +118,12 @@ public class JobServiceImpl implements JobService {
         job.setFilePath(storedPath);
         job.setJdText(text);
         job.setContentHash(contentHash);
-        job.setMustHaveSkills(classified.mustHave());
-        job.setNiceToHaveSkills(classified.niceToHave());
-        job.setExperienceMinYears(experience.minYears());
-        job.setExperienceMaxYears(experience.maxYears());
+        job.setMustHaveSkills(read.mustHave());
+        job.setNiceToHaveSkills(read.niceToHave());
+        job.setSkillAliases(read.aliases());
+        job.setSkillsSource(read.source());
+        job.setExperienceMinYears(read.minYears());
+        job.setExperienceMaxYears(read.maxYears());
         applyOwner(job, owner);
 
         jobRepository.save(job);
@@ -124,7 +131,7 @@ public class JobServiceImpl implements JobService {
         events.publishEvent(new JdUploadedEvent(job.getId()));
         List<EvictedJobResponse> evicted = evictOldestBeyondCap();
 
-        int skillCount = classified.mustHave().size() + classified.niceToHave().size();
+        int skillCount = read.mustHave().size() + read.niceToHave().size();
         String reply = skillCount > 0
                 ? "Got the job description — extracted " + skillCount + " skill" + (skillCount == 1 ? "" : "s") + "."
                 : "Got the job description, but couldn't find any known skills in it — you can add them with \"paste skills only\".";
@@ -392,6 +399,7 @@ public class JobServiceImpl implements JobService {
             throw new ApiException(HttpStatus.FORBIDDEN, "You don't have permission to do that.");
         }
 
+        if (request.must_have_skills() != null || request.nice_to_have_skills() != null) job.setSkillsSource("HR");
         if (request.must_have_skills() != null) job.setMustHaveSkills(cleanSkills(request.must_have_skills()));
         if (request.nice_to_have_skills() != null) job.setNiceToHaveSkills(cleanSkills(request.nice_to_have_skills()));
         if (request.experience_min_years() != null) job.setExperienceMinYears(request.experience_min_years());
@@ -401,6 +409,32 @@ public class JobServiceImpl implements JobService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Minimum experience can't be more than the maximum.");
         }
         jobRepository.save(job);
+    }
+
+    record JdSkills(List<String> mustHave, List<String> niceToHave, java.util.Map<String, List<String>> aliases,
+                    Integer minYears, Integer maxYears, String source) {}
+
+    /** Skills and experience range from the JD: the AI read when a Gemini key is set (works for any
+     *  role), otherwise the fixed skill list. A range written as numbers in the JD ("3-6 years")
+     *  always wins over the AI's reading of it. */
+    JdSkills readSkills(String text) {
+        var experience = experienceParser.extractRange(text);
+        String apiKey = settings.getGeminiApiKeyOrNull();
+        if (apiKey != null && !apiKey.isBlank() && text != null && !text.isBlank()) {
+            try {
+                var ai = jdSkillExtractor.extract(apiKey, text);
+                boolean stated = experience.minYears() != null || experience.maxYears() != null;
+                return new JdSkills(ai.mustHave(), ai.niceToHave(), ai.aliases(),
+                        stated ? experience.minYears() : ai.minYears(),
+                        stated ? experience.maxYears() : ai.maxYears(), "AI");
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(JobServiceImpl.class)
+                        .warn("AI JD skill read failed, using the skill list: {}", e.toString());
+            }
+        }
+        var classified = skillDictionary.classify(text);
+        return new JdSkills(classified.mustHave(), classified.niceToHave(), new java.util.HashMap<>(),
+                experience.minYears(), experience.maxYears(), "DICTIONARY");
     }
 
     private static List<String> cleanSkills(List<String> raw) {

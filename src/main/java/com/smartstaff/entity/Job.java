@@ -55,6 +55,15 @@ public class Job {
     @Column(name = "nice_to_have_skills", columnDefinition = "jsonb")
     private List<String> niceToHaveSkills = new ArrayList<>();
 
+    /** Other ways a CV may phrase each skill (skill -> phrases), from the AI JD read. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "skill_aliases", columnDefinition = "jsonb")
+    private java.util.Map<String, List<String>> skillAliases = new java.util.HashMap<>();
+
+    /** Where the skill list came from: AI, DICTIONARY (fixed list, no AI) or HR (edited by hand). */
+    @Column(name = "skills_source")
+    private String skillsSource;
+
     /** F10 weights and gates; null = ScoringSettings.DEFAULTS. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "scoring_settings", columnDefinition = "jsonb")
