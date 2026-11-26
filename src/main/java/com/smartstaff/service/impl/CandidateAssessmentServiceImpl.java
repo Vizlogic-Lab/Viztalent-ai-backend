@@ -54,7 +54,7 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
     static final String USED = "This assessment has already been submitted.";
 
     /** Time budget for a level whose questions carry no estimates. */
-    static final long DEFAULT_LEVEL_SECONDS = 45L * 60;
+    static final long DEFAULT_LEVEL_SECONDS = com.smartstaff.util.AssessmentTiming.DEFAULT_LEVEL_SECONDS;
     static final int EVENT_CAP = 500;
 
     private final ActivityRecorder activity;
@@ -363,13 +363,9 @@ public class CandidateAssessmentServiceImpl implements CandidateAssessmentServic
 
     private AssessmentAttempt createAttempt(Invite invite, String level) {
         Assessment assessment = invite.getAssessment();
-        // A custom paper sets its own time limit; older papers and generated tests use the question estimates.
-        Integer paperMinutes = assessment.getMarkingScheme() == null ? null : assessment.getMarkingScheme().duration_minutes();
-        long budget = paperMinutes != null ? paperMinutes * 60L : questionsFor(assessment, level).stream()
-                .filter(q -> q.getTimeEstimateSec() != null)
-                .mapToLong(AssessmentQuestion::getTimeEstimateSec)
-                .sum();
-        if (budget <= 0) budget = DEFAULT_LEVEL_SECONDS;
+        // A custom paper sets its own time limit; older papers and generated tests use the question
+        // estimates. The invite text shows the same number (AssessmentTiming).
+        long budget = com.smartstaff.util.AssessmentTiming.levelSeconds(assessment, questionsFor(assessment, level));
         Instant now = Instant.now();
         Instant deadline = now.plusSeconds(budget);
         if (deadline.isAfter(invite.getExpiresAt())) deadline = invite.getExpiresAt();
