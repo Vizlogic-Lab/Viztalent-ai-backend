@@ -76,6 +76,22 @@ class ScreeningBatchIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("a recruiter's pass with a reason lets a low-score candidate in through the shared link")
+    void recruiterPassLetsCandidateIn() throws Exception {
+        postJsonAs(admin, "/api/jobs/" + job + "/candidates/override",
+                Map.of("file_name", "asha.txt", "passed", true, "reason", "Referred by the hiring manager"))
+                .andExpect(status().isOk());
+
+        JsonNode asha = null;
+        for (JsonNode c : createBatch(Map.of("min_score", 50)).path("roster")) {
+            if (c.path("email").asText().startsWith("asha")) asha = c;
+        }
+        assertThat(asha).isNotNull();
+        assertThat(asha.path("fit_score").asInt()).isLessThan(50);
+        assertThat(asha.path("included").asBoolean()).isTrue();
+    }
+
+    @Test
     @DisplayName("asking again returns the same link instead of creating another; force_new replaces it")
     void oneLink() throws Exception {
         JsonNode first = createBatch(Map.of("min_score", 50));
