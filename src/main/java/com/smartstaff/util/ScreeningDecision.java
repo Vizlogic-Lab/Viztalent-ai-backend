@@ -4,7 +4,9 @@ import com.smartstaff.entity.Candidate;
 
 /** Final screening decision for a candidate.
  *  Step 1: years of experience must sit inside the JD range (UNKNOWN goes on to step 2).
- *  Step 2: keyword skill score and/or AI match, per the admin's pass rule.
+ *  Step 2: skill match % (the AI per-skill check, or the keyword check when AI is unavailable)
+ *  and/or the overall AI match, per the admin's pass rule. While the AI check runs the
+ *  candidate is PENDING, because the skill match % is not final yet.
  *  A recruiter override (with a reason) passes the candidate whatever the steps said. */
 public final class ScreeningDecision {
 
@@ -73,34 +75,36 @@ public final class ScreeningDecision {
         boolean aiPass = aiDone && c.getAiMatchScore() >= PASS_MARK;
         // With no AI result possible (no key / failed), the keyword score decides.
         boolean aiUnavailable = !aiDone && !aiPending;
+        // The AI check also produces the final skill match %, so nothing is decided until it's done.
+        if (aiPending) return pending();
 
         switch (rule) {
             case KEYWORD_ONLY:
-                return kwPass ? pass("Skill score " + kw) : fail("Skill score " + kw + " is below " + PASS_MARK);
+                return kwPass ? pass("Skill match " + kw) : fail("Skill match " + kw + " is below " + PASS_MARK);
             case AI_ONLY:
                 if (aiPending) return pending();
                 if (aiUnavailable) {
-                    return kwPass ? pass("AI match unavailable; skill score " + kw)
-                                  : fail("AI match unavailable; skill score " + kw + " is below " + PASS_MARK);
+                    return kwPass ? pass("AI match unavailable; skill match " + kw)
+                                  : fail("AI match unavailable; skill match " + kw + " is below " + PASS_MARK);
                 }
                 return aiPass ? pass("AI match " + c.getAiMatchScore())
                               : fail("AI match " + c.getAiMatchScore() + " is below " + PASS_MARK);
             case BOTH:
-                if (!kwPass) return fail("Skill score " + kw + " is below " + PASS_MARK);
+                if (!kwPass) return fail("Skill match " + kw + " is below " + PASS_MARK);
                 if (aiPending) return pending();
-                if (aiUnavailable) return pass("Skill score " + kw + "; AI match unavailable");
-                return aiPass ? pass("Skill score and AI match are both " + PASS_MARK + "+")
+                if (aiUnavailable) return pass("Skill match " + kw + "; AI match unavailable");
+                return aiPass ? pass("Skill match and AI match are both " + PASS_MARK + "+")
                               : fail("AI match " + c.getAiMatchScore() + " is below " + PASS_MARK);
             case EITHER:
             default:
-                if (kwPass) return pass("Skill score " + kw);
+                if (kwPass) return pass("Skill match " + kw);
                 if (aiPass) return pass("AI match " + c.getAiMatchScore());
                 if (aiPending) return pending();
-                return fail("Skill score and AI match are below " + PASS_MARK);
+                return fail("Skill match and AI match are below " + PASS_MARK);
         }
     }
 
     private static Result pass(String why) { return new Result("PASS", "SKILLS_AI", why); }
     private static Result fail(String why) { return new Result("FAIL", "SKILLS_AI", why); }
-    private static Result pending() { return new Result("PENDING", "SKILLS_AI", "Waiting for the AI match"); }
+    private static Result pending() { return new Result("PENDING", "SKILLS_AI", "Waiting for the AI skill check"); }
 }

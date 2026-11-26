@@ -24,7 +24,7 @@ import java.util.*;
 public class ReportXlsxService {
 
     static final List<String> CANDIDATE_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Phone",
-            "Years Experience", "Fit Score", "AI Match", "AI View", "Screening Decision", "Screening Reason",
+            "Years Experience", "Skill Match", "AI Match", "AI View", "Screening Decision", "Screening Reason",
             "Override Reason", "Overridden By", "Matched Skills", "Missing Skills",
             "Assessment Level", "Theory", "Hands-on", "Overall", "Recommendation", "Result Status");
     static final List<String> ASSESSMENT_HEADERS = List.of("JD Number", "Role", "Candidate", "Email", "Level", "Version",

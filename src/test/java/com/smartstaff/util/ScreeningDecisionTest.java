@@ -50,7 +50,9 @@ class ScreeningDecisionTest {
 
     @Test
     void either() {
-        assertEquals("PASS", d(c("PASS", 60, "PENDING", null), Rule.EITHER));
+        // While the AI check runs the skill match % is not final, so nothing is decided yet.
+        assertEquals("PENDING", d(c("PASS", 60, "PENDING", null), Rule.EITHER));
+        assertEquals("PASS", d(c("PASS", 60, "OFF", null), Rule.EITHER));
         assertEquals("PASS", d(c("PASS", 37, "DONE", 74), Rule.EITHER));
         assertEquals("PENDING", d(c("PASS", 37, "PENDING", null), Rule.EITHER));
         assertEquals("FAIL", d(c("PASS", 37, "DONE", 40), Rule.EITHER));
@@ -77,7 +79,8 @@ class ScreeningDecisionTest {
     @Test
     void keywordOnly() {
         assertEquals("FAIL", d(c("PASS", 37, "DONE", 99), Rule.KEYWORD_ONLY));
-        assertEquals("PASS", d(c("PASS", 50, "PENDING", null), Rule.KEYWORD_ONLY));
+        assertEquals("PENDING", d(c("PASS", 50, "PENDING", null), Rule.KEYWORD_ONLY));
+        assertEquals("PASS", d(c("PASS", 50, "FAILED", null), Rule.KEYWORD_ONLY));
     }
 
     @Test

@@ -42,7 +42,9 @@ public class CandidateMapper {
                 c.isOverridePassed(),
                 c.getOverrideReason(),
                 c.getOverrideBy(),
-                c.getOverrideAt() == null ? null : c.getOverrideAt().toString()
+                c.getOverrideAt() == null ? null : c.getOverrideAt().toString(),
+                c.getSkillMatchSource(),
+                c.getSkillResults() == null ? java.util.List.of() : c.getSkillResults()
         );
     }
 }

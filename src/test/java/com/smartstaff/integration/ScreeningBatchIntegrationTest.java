@@ -36,6 +36,9 @@ class ScreeningBatchIntegrationTest extends IntegrationTestBase {
         uploadResumes(admin, job, "priya.txt", PRIYA, "ravi.txt", RAVI, "asha.txt", ASHA, "nina.txt", NO_EMAIL)
                 .andExpect(status().isOk());
         postJsonAs(admin, "/api/run_screening", Map.of("session_id", job)).andExpect(status().isOk());
+        // No AI in these tests: the AI check is "unavailable", so the keyword backup decides.
+        // (A candidate still being checked is PENDING and is not let in until it's decided.)
+        jdbc.update("update candidates set ai_match_status = 'OFF' where job_id = ?::uuid and ai_match_status = 'PENDING'", job);
     }
 
     private JsonNode createBatch(Map<String, Object> body) throws Exception {

@@ -141,7 +141,7 @@ class ScorecardDashboardActivityIntegrationTest extends IntegrationTestBase {
         var resp = mvc.perform(get(signed.path("url").asText())).andExpect(status().isOk()).andReturn().getResponse();
         assertThat(resp.getHeader("Content-Disposition")).contains("viztalent-report.xlsx");
         try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(resp.getContentAsByteArray()))) {
-            assertThat(headers(wb.getSheet("Candidates"))).contains("Fit Score", "Theory", "Hands-on", "Recommendation");
+            assertThat(headers(wb.getSheet("Candidates"))).contains("Skill Match", "Theory", "Hands-on", "Recommendation");
             Sheet a = wb.getSheet("Assessments");
             assertThat(headers(a)).startsWith("JD Number", "Role", "Candidate", "Email", "Level")
                     .contains("Theory", "Theory Band", "Hands-on", "Hands-on Band", "Overall", "Result Status");
