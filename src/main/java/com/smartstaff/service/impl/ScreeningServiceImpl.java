@@ -95,8 +95,8 @@ public class ScreeningServiceImpl implements ScreeningService {
         // must-have skills at all (e.g. a skills-only JD where everything
         // was phrased as "nice to have") — otherwise Total_Required would be
         // a meaningless 0 for every candidate.
-        List<String> required = job.getMustHaveSkills().isEmpty() ? job.allSkills() : job.getMustHaveSkills();
-        List<String> niceToHave = job.getMustHaveSkills().isEmpty() ? List.of() : job.getNiceToHaveSkills();
+        List<String> required = com.smartstaff.util.SkillEvidence.mustHave(job);
+        List<String> niceToHave = com.smartstaff.util.SkillEvidence.niceToHave(job);
 
         List<Candidate> scored = new ArrayList<>();
         for (Resume resume : resumes) {
@@ -208,7 +208,7 @@ public class ScreeningServiceImpl implements ScreeningService {
         allMatched.addAll(matchedNice);
 
         String breakdown = String.format(
-                "Skills match %d/%d required (%.0f%%)%s · %d yrs experience · weighted fit %d/100",
+                "Keyword check: %d/%d required (%.0f%%)%s · %d yrs experience · skill match %d/100",
                 matchedRequired.size(), required.size(),
                 required.isEmpty() ? 100.0 : (double) matchedRequired.size() / required.size() * 100,
                 matchedNice.isEmpty() ? "" : String.format(" + %d/%d nice-to-have", matchedNice.size(), niceToHave.size()),
@@ -229,6 +229,9 @@ public class ScreeningServiceImpl implements ScreeningService {
         candidate.setMatchedRequiredCount(matchedRequired.size());
         candidate.setTotalRequiredCount(required.size());
         candidate.setScoreBreakdown(breakdown);
+        // The keyword check is the starting value and the backup; the AI per-skill check
+        // replaces it in the background (AiMatchJob).
+        candidate.setSkillMatchSource(AiMatchJob.SOURCE_KEYWORD);
         return candidate;
     }
 

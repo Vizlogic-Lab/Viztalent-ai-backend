@@ -78,6 +78,36 @@ class ExperienceParserTest {
     }
 
     @Test
+    @DisplayName("resume years: a headline ending with the total, and 'worked N years'")
+    void resumeYearsHeadlineAndWorked() {
+        java.time.YearMonth now = java.time.YearMonth.of(2026, 11);
+        String daniel = """
+                Daniel Shahid
+                daniel.test@example.com
+                Contact Center Consultant - 11.5 years
+                Worked 6 years on Genesys PureCloud and Genesys Cloud CX.
+                """;
+        assertThat(parser.extractYearsOfExperience(daniel, now)).isEqualTo(11);
+        assertThat(parser.extractYearsOfExperience("Priya Nair\nContact Centre Engineer - 5 years\nAvaya and Cisco.", now)).isEqualTo(5);
+        assertThat(parser.extractYearsOfExperience("Java Developer | 7 yrs", now)).isEqualTo(7);
+        assertThat(parser.extractYearsOfExperience("Senior QA Engineer (8+ years)", now)).isEqualTo(8);
+        assertThat(parser.extractYearsOfExperience("Worked 6 years on Genesys PureCloud", now)).isEqualTo(6);
+        assertThat(parser.extractYearsOfExperience("Working for over 4 years with SAP BW.", now)).isEqualTo(4);
+        assertThat(parser.extractYearsOfExperience("Contact Center Consultant - 11.5 years\r\nNext line", now)).isEqualTo(11);
+    }
+
+    @Test
+    @DisplayName("resume years: age, education and in-sentence numbers are not experience")
+    void resumeYearsHeadlineGuards() {
+        java.time.YearMonth now = java.time.YearMonth.of(2026, 11);
+        assertThat(parser.extractYearsOfExperience("Age: 29 years", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("Date of birth - 32 years", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("B.Tech - 4 years", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("The project ran for 3 years and won an award.", now)).isZero();
+        assertThat(parser.extractYearsOfExperience("Warranty support - 2 years. Customers renewed every year after that.", now)).isZero();
+    }
+
+    @Test
     @DisplayName("resume years: ignores absurd numbers and blank input")
     void resumeYearsGuards() {
         assertThat(parser.extractYearsOfExperience("99 years of experience")).isZero();

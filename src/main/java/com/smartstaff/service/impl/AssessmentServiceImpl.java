@@ -100,7 +100,7 @@ public class AssessmentServiceImpl implements AssessmentService {
         Optional<Job> job = jobRepository.findById(jobId);
         if (job.isEmpty()) {
             return new AssessmentStatusResponse(true, false, null, 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
         // A hand-authored draft isn't shown here until it is published.
         Optional<Assessment> latest = assessmentRepository.findTopByJobIdAndCandidateIdIsNullAndLifecycleNotOrderByVersionDesc(
@@ -108,7 +108,7 @@ public class AssessmentServiceImpl implements AssessmentService {
         Optional<Assessment> current = assessmentRepository.findByJobIdAndCurrentTrue(jobId);
         if (latest.isEmpty()) {
             return new AssessmentStatusResponse(true, true, job.get().getTitle(), 0, 0, null, null, false, false, null,
-                    null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
 
         Assessment a = latest.get();
@@ -170,7 +170,19 @@ public class AssessmentServiceImpl implements AssessmentService {
                 passed,
                 recommendations,
                 approval.map(r -> r.getStatus().name()).orElse(null),
-                approval.map(SmeReview::getComment).orElse(null));
+                approval.map(SmeReview::getComment).orElse(null),
+                current.map(this::levelInfo).orElse(null));
+    }
+
+    /** Time limit, question count and types per level of the version invites use. */
+    private Map<String, com.smartstaff.util.AssessmentTiming.LevelInfo> levelInfo(Assessment assessment) {
+        Map<String, List<com.smartstaff.entity.AssessmentQuestion>> byLevel = new LinkedHashMap<>();
+        for (var q : assessmentQuestionRepository.findByAssessmentIdOrderByLevelAscSeqAsc(assessment.getId())) {
+            byLevel.computeIfAbsent(q.getLevel(), k -> new java.util.ArrayList<>()).add(q);
+        }
+        Map<String, com.smartstaff.util.AssessmentTiming.LevelInfo> out = new LinkedHashMap<>();
+        byLevel.forEach((level, qs) -> out.put(level, com.smartstaff.util.AssessmentTiming.levelInfo(assessment, qs)));
+        return out;
     }
 
     @Override

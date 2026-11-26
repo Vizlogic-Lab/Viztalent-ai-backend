@@ -39,5 +39,8 @@ public record AssessmentStatusResponse(
         /* F13: PENDING / IN_REVIEW / APPROVED / RETURNED when the version needs SME approval; null otherwise.
          * Invites are refused (409 awaiting_expert_approval) until APPROVED. */
         String approval_status,
-        String approval_comment
+        String approval_comment,
+        /* Per level of the version invites use: real time limit (minutes), question count and types.
+         * The invite email states this time instead of a guess. */
+        Map<String, com.smartstaff.util.AssessmentTiming.LevelInfo> level_info
 ) {}

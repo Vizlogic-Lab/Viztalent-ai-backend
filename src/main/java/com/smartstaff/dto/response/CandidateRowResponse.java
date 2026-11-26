@@ -29,5 +29,7 @@ public record CandidateRowResponse(
         boolean Override_Passed,
         String Override_Reason,
         String Override_By,
-        String Override_At
+        String Override_At,
+        String Skill_Match_Source,
+        java.util.List<java.util.Map<String, Object>> Skill_Results
 ) {}

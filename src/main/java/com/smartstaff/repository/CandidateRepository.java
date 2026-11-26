@@ -15,6 +15,10 @@ public interface CandidateRepository extends JpaRepository<Candidate, UUID> {
 
     List<Candidate> findByJobIdOrderByFitScoreDesc(UUID jobId);
 
+    /** Jobs that have candidates with this AI check status (the AI check sweep looks for PENDING). */
+    @Query("select distinct c.job.id from Candidate c where c.aiMatchStatus = :status")
+    List<UUID> findJobIdsByAiMatchStatus(@Param("status") String status);
+
     /** Interview prep looks the candidate up by (job, resume filename) — the
      *  frontend only ever sends file_name, not a candidate id. */
     Optional<Candidate> findByJobIdAndResumeFilename(UUID jobId, String filename);

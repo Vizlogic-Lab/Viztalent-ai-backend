@@ -89,6 +89,15 @@ public class Candidate {
     @Column(name = "experience_status")
     private String experienceStatus;
 
+    /** Where fit_score (the skill match %) came from: AI (per-skill check) or KEYWORD (exact words). */
+    @Column(name = "skill_match_source")
+    private String skillMatchSource;
+
+    /** Per-skill AI check: skill, must_have, level (STRONG/PARTIAL/MISSING), score, evidence. */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "skill_results", columnDefinition = "jsonb")
+    private List<java.util.Map<String, Object>> skillResults = new ArrayList<>();
+
     /** Recruiter passed this candidate despite a failed step; the reason is required. */
     @Column(name = "override_passed", nullable = false)
     private boolean overridePassed;

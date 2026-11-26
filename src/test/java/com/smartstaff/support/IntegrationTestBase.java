@@ -51,6 +51,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         "app.rate-limit.enabled=false",
         "app.assessment.auto-submit-enabled=false",
         "app.evaluation.retry-enabled=false",
+        "app.ai-match.sweep-enabled=false",
         "app.analytics.quality-refresh-enabled=false",
         "app.email.reminders-enabled=false",
         "app.jwt.secret=test-jwt-secret-that-is-comfortably-longer-than-32-bytes",

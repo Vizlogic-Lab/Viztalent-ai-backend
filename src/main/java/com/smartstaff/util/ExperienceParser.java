@@ -31,6 +31,21 @@ public class ExperienceParser {
     private static final Pattern EXPERIENCE_THEN_YEARS = Pattern.compile(
             "experience[^\\d\\n]{0,20}?(\\d{1,2}(?:\\.\\d)?)\\s*\\+?\\s*(?:years?|yrs?)\\b", Pattern.CASE_INSENSITIVE);
 
+    // A headline that ends with the total: "Contact Center Consultant - 11.5 years",
+    // "Java Developer | 7 yrs", "Senior QA Engineer (8+ years)". Only at the end of a short line,
+    // after a separator; education, age and birth-date lines are skipped (see statedYears).
+    private static final Pattern HEADLINE_YEARS = Pattern.compile(
+            "^(?=[^\\n]{3,90}$)[^\\n]*?[-–—|:,(]\\s*(\\d{1,2}(?:\\.\\d{1,2})?)\\s*\\+?\\s*(?:years?|yrs?)\\.?\\s*\\)?\\s*$",
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    // "Worked 6 years on Genesys", "working for over 4 years with SAP".
+    private static final Pattern WORKED_YEARS = Pattern.compile(
+            "\\bwork(?:ed|ing)\\s+(?:for\\s+)?(?:over\\s+|about\\s+|around\\s+|nearly\\s+|almost\\s+)?"
+                    + "(\\d{1,2}(?:\\.\\d{1,2})?)\\s*\\+?\\s*(?:years?|yrs?)\\b",
+            Pattern.CASE_INSENSITIVE);
+    // Lines that state an age, not experience ("Age: 29 years").
+    private static final Pattern AGE_LINE = Pattern.compile(
+            "\\b(age|aged|dob|d\\.o\\.b|date\\s+of\\s+birth|born)\\b", Pattern.CASE_INSENSITIVE);
+
     private static final String MONTH =
             "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
     // Work-history dates: "Jan 2019 - Mar 2024", "2019 – Present", "06/2018 to till date".
@@ -99,6 +114,18 @@ public class ExperienceParser {
         Matcher e = EXPERIENCE_THEN_YEARS.matcher(text);
         while (e.find()) {
             double years = Double.parseDouble(e.group(1));
+            if (years <= 50) max = Math.max(max, years);
+        }
+        Matcher w = WORKED_YEARS.matcher(text);
+        while (w.find()) {
+            double years = Double.parseDouble(w.group(1));
+            if (years <= 50) max = Math.max(max, years);
+        }
+        Matcher h = HEADLINE_YEARS.matcher(text);
+        while (h.find()) {
+            String line = h.group();
+            if (EDUCATION_LINE.matcher(line).find() || AGE_LINE.matcher(line).find()) continue;
+            double years = Double.parseDouble(h.group(1));
             if (years <= 50) max = Math.max(max, years);
         }
         return (int) Math.floor(max);

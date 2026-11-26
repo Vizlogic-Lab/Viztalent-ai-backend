@@ -119,6 +119,7 @@ public class ScreeningBatchService {
 
             List<String> skipped = new ArrayList<>();
             Set<String> seen = new HashSet<>();
+            var rule = settings.getScreeningRule();
             // Highest score first, so a candidate uploaded twice keeps their best resume.
             for (Candidate c : candidates.findByJobIdOrderByFitScoreDesc(jobId)) {
                 String email = c.getEmail() == null ? "" : c.getEmail().trim();
@@ -133,7 +134,7 @@ public class ScreeningBatchService {
                 bc.setEmail(email);
                 bc.setResumeId(c.getResume() == null ? null : c.getResume().getId());
                 bc.setFitScore(c.getFitScore());
-                bc.setIncluded(c.getFitScore() >= minScore);
+                bc.setIncluded(canEnter(c, rule, minScore));
                 batch.getCandidates().add(bc);
             }
             if (batch.getCandidates().isEmpty()) {
@@ -146,6 +147,20 @@ public class ScreeningBatchService {
                     + batch.getCandidates().stream().filter(BatchCandidate::isIncluded).count() + " candidates", batch.getId());
             return view(batch, skipped, false);
         });
+    }
+
+    /** Who may enter through the shared link. It follows the screening decision, not only the
+     *  keyword score: a recruiter's "pass with reason" always lets the candidate in; otherwise the
+     *  candidate must have passed screening (experience, then skills / AI match under the admin's
+     *  rule) and their best score (keyword, or AI match when done) must reach the link's minimum.
+     *  FAIL, REVIEW and PENDING candidates stay out until a recruiter decides. */
+    static boolean canEnter(Candidate c, com.smartstaff.util.ScreeningDecision.Rule rule, int minScore) {
+        if (c.isOverridePassed()) return true;
+        var d = com.smartstaff.util.ScreeningDecision.decide(c, rule);
+        if (!"PASS".equals(d.decision())) return false;
+        int best = c.getFitScore();
+        if ("DONE".equals(c.getAiMatchStatus()) && c.getAiMatchScore() != null) best = Math.max(best, c.getAiMatchScore());
+        return best >= minScore;
     }
 
     /** The job's current open batch, or null. */

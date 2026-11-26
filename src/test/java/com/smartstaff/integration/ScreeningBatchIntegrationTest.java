@@ -36,6 +36,9 @@ class ScreeningBatchIntegrationTest extends IntegrationTestBase {
         uploadResumes(admin, job, "priya.txt", PRIYA, "ravi.txt", RAVI, "asha.txt", ASHA, "nina.txt", NO_EMAIL)
                 .andExpect(status().isOk());
         postJsonAs(admin, "/api/run_screening", Map.of("session_id", job)).andExpect(status().isOk());
+        // No AI in these tests: the AI check is "unavailable", so the keyword backup decides.
+        // (A candidate still being checked is PENDING and is not let in until it's decided.)
+        jdbc.update("update candidates set ai_match_status = 'OFF' where job_id = ?::uuid and ai_match_status = 'PENDING'", job);
     }
 
     private JsonNode createBatch(Map<String, Object> body) throws Exception {
@@ -73,6 +76,22 @@ class ScreeningBatchIntegrationTest extends IntegrationTestBase {
         for (JsonNode c : batch.path("roster")) if (c.path("email").asText().startsWith("asha")) asha = c;
         assertThat(asha).isNotNull();
         assertThat(asha.path("included").asBoolean()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a recruiter's pass with a reason lets a low-score candidate in through the shared link")
+    void recruiterPassLetsCandidateIn() throws Exception {
+        postJsonAs(admin, "/api/jobs/" + job + "/candidates/override",
+                Map.of("file_name", "asha.txt", "passed", true, "reason", "Referred by the hiring manager"))
+                .andExpect(status().isOk());
+
+        JsonNode asha = null;
+        for (JsonNode c : createBatch(Map.of("min_score", 50)).path("roster")) {
+            if (c.path("email").asText().startsWith("asha")) asha = c;
+        }
+        assertThat(asha).isNotNull();
+        assertThat(asha.path("fit_score").asInt()).isLessThan(50);
+        assertThat(asha.path("included").asBoolean()).isTrue();
     }
 
     @Test
