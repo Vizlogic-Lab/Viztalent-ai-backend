@@ -81,6 +81,20 @@ class ScreeningDecisionTest {
     }
 
     @Test
+    void nearMissesAreSentForReview() {
+        // Divya: keyword 34, AI 48 -> 48 is 2 below the mark
+        assertEquals("REVIEW", d(c("PASS", 34, "DONE", 48), Rule.EITHER));
+        assertEquals("REVIEW", d(c("PASS", 34, "DONE", 45), Rule.EITHER));
+        assertEquals("FAIL", d(c("PASS", 34, "DONE", 44), Rule.EITHER));
+        assertEquals("REVIEW", d(c("PASS", 60, "DONE", 47), Rule.BOTH));
+        assertEquals("FAIL", d(c("PASS", 40, "DONE", 90), Rule.BOTH));   // keyword 40 is not near
+        assertEquals("REVIEW", d(c("PASS", 90, "DONE", 46), Rule.AI_ONLY));
+        assertEquals("REVIEW", d(c("PASS", 49, "DONE", 99), Rule.KEYWORD_ONLY));
+        // An experience fail is never softened.
+        assertEquals("FAIL", d(c("FAIL", 49, "SKIPPED", null), Rule.EITHER));
+    }
+
+    @Test
     void parseFallsBackToEither() {
         assertEquals(Rule.EITHER, Rule.parse(null));
         assertEquals(Rule.EITHER, Rule.parse("nonsense"));

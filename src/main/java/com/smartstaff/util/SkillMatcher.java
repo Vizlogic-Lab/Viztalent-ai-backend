@@ -26,12 +26,33 @@ public final class SkillMatcher {
     static Pattern pattern(String phrase) {
         String[] words = phrase.strip().split("[\\s\\-/]+");
         StringBuilder sb = new StringBuilder("(?<![\\w+#.])");
-        for (int i = 0; i < words.length; i++) {
-            if (i > 0) sb.append("[\\s\\-/]+");
-            sb.append(Pattern.quote(words[i]));
+        for (int i = 0; i < words.length - 1; i++) {
+            sb.append(Pattern.quote(words[i])).append("[\\s\\-/]+");
         }
-        // Allow a plural on the last word ("stakeholders"), but not a longer word.
-        sb.append("(?:s|es)?(?![\\w+#])");
+        // The last word matches in singular or plural, whichever way the JD or CV wrote it
+        // ("escalations" ~ "escalation", "dependency" ~ "dependencies"), but not a longer word.
+        sb.append(singularOrPlural(words[words.length - 1].toLowerCase(Locale.ROOT)));
+        sb.append("(?![\\w+#])");
         return Pattern.compile(sb.toString(), Pattern.CASE_INSENSITIVE);
+    }
+
+    static String singularOrPlural(String w) {
+        if (w.length() > 4 && w.endsWith("ies")) {
+            return Pattern.quote(w.substring(0, w.length() - 3)) + "(?:y|ies)";
+        }
+        if (w.length() > 3 && w.endsWith("y") && !isVowel(w.charAt(w.length() - 2))) {
+            return Pattern.quote(w.substring(0, w.length() - 1)) + "(?:y|ies)";
+        }
+        // Strip a plain plural "s", but leave words that just end in s ("analysis", "process", "aws").
+        if (w.length() > 4 && w.endsWith("s") && !w.endsWith("ss") && !w.endsWith("is") && !w.endsWith("us")) {
+            String base = w.endsWith("es") && (w.endsWith("ches") || w.endsWith("shes") || w.endsWith("xes"))
+                    ? w.substring(0, w.length() - 2) : w.substring(0, w.length() - 1);
+            return Pattern.quote(base) + "(?:s|es)?";
+        }
+        return Pattern.quote(w) + "(?:s|es)?";
+    }
+
+    private static boolean isVowel(char c) {
+        return "aeiou".indexOf(c) >= 0;
     }
 }

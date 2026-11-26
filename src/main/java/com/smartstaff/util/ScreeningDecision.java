@@ -9,6 +9,9 @@ import com.smartstaff.entity.Candidate;
 public final class ScreeningDecision {
 
     public static final int PASS_MARK = 50;
+    /** A step-2 fail whose deciding score is this close below the pass mark (45-49) becomes
+     *  REVIEW: the AI match moves a few points between runs, so a recruiter should decide. */
+    public static final int REVIEW_MARGIN = 5;
 
     /** Admin-chosen step-2 rule. */
     public enum Rule {
@@ -32,7 +35,30 @@ public final class ScreeningDecision {
         return "PASS";
     }
 
+    /** PASS, FAIL, PENDING or REVIEW (a near miss at step 2, for a recruiter to decide). */
     public static Result decide(Candidate c, Rule rule) {
+        Result r = decideStrict(c, rule);
+        if (!"FAIL".equals(r.decision()) || !"SKILLS_AI".equals(r.step())) return r;
+        Integer near = decidingScore(c, rule);
+        if (near != null && near >= PASS_MARK - REVIEW_MARGIN && near < PASS_MARK) {
+            return new Result("REVIEW", "SKILLS_AI", r.reason() + " — close to " + PASS_MARK + ", needs a recruiter's review");
+        }
+        return r;
+    }
+
+    /** The score that would have to reach the pass mark for the candidate to pass. */
+    private static Integer decidingScore(Candidate c, Rule rule) {
+        int kw = c.getFitScore();
+        Integer ai = "DONE".equals(c.getAiMatchStatus()) ? c.getAiMatchScore() : null;
+        return switch (rule) {
+            case KEYWORD_ONLY -> kw;
+            case AI_ONLY -> ai != null ? ai : kw;
+            case BOTH -> ai == null ? kw : Math.min(kw, ai);
+            case EITHER -> ai == null ? kw : Math.max(kw, ai);
+        };
+    }
+
+    private static Result decideStrict(Candidate c, Rule rule) {
         if (c.isOverridePassed()) {
             return new Result("PASS", "OVERRIDE", "Passed by recruiter: " + c.getOverrideReason());
         }

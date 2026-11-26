@@ -39,6 +39,21 @@ class SkillMatcherTest {
     }
 
     @Test
+    void singularAndPluralMatchEitherWay() {
+        String cv = "Authored RCA documents for internal escalation use; mitigated infrastructure dependencies; ran batches.";
+        assertThat(SkillMatcher.matches(cv, "escalation management", Map.of("escalation management", List.of("escalations")))).isTrue();
+        assertThat(SkillMatcher.matches(cv, "infrastructure dependency", null)).isTrue();
+        assertThat(SkillMatcher.matches("one infrastructure dependency", "infrastructure dependencies", null)).isTrue();
+        assertThat(SkillMatcher.matches(cv, "batch", null)).isTrue();
+        // Words that only end in "s" are not cut down.
+        assertThat(SkillMatcher.matches("risk analysis", "analysis", null)).isTrue();
+        assertThat(SkillMatcher.matches("risk analys", "analysis", null)).isFalse();
+        assertThat(SkillMatcher.matches("deployed on aws", "aws", null)).isTrue();
+        assertThat(SkillMatcher.matches("the aw team", "aws", null)).isFalse();
+        assertThat(SkillMatcher.matches("good process", "process", null)).isTrue();
+    }
+
+    @Test
     void blankInputs() {
         assertThat(SkillMatcher.matches(null, "jira", null)).isFalse();
         assertThat(SkillMatcher.matches(CV, " ", null)).isFalse();
