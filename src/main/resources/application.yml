@@ -100,6 +100,10 @@ app:
     retry-window-minutes: 60
     retry-enabled: ${EVALUATION_RETRY:true}
     sweep-interval-ms: 60000
+  # AI skill check of screened CVs: re-run checks left pending (e.g. by a restart).
+  ai-match:
+    sweep-enabled: ${AI_MATCH_SWEEP:true}
+    sweep-interval-ms: 180000
   # Code runner (self-hosted Piston; its URL is saved in Settings).
   runner:
     max-concurrency: ${RUNNER_MAX_CONCURRENCY:8}

@@ -8,7 +8,12 @@ import com.smartstaff.service.SettingsService;
 import com.smartstaff.util.SkillEvidence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.event.TransactionPhase;
@@ -17,17 +22,28 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Runs the AI check for a job's PENDING candidates in the background, one at a time, after
  *  screening has committed. One AI call per CV gives the per-skill check and the overall AI
  *  match. When it succeeds, the skill match % (fit_score) is replaced by the AI per-skill score
  *  (source AI). A failure marks only that candidate FAILED and with no Gemini key every pending
- *  candidate is OFF; in both cases the keyword check from screening stays (source KEYWORD). */
+ *  candidate is OFF; in both cases the keyword check from screening stays (source KEYWORD).
+ *
+ *  A check lives in memory, so a restart (e.g. a deploy) during screening would leave candidates
+ *  PENDING — and a PENDING candidate is neither passed nor failed. So on startup, and every few
+ *  minutes, {@link #sweep()} re-runs every job that still has PENDING candidates. Single node: a
+ *  job already being checked here is not started twice. Off in tests, which call sweep() directly. */
 @Component
 public class AiMatchJob {
 
     private static final Logger log = LoggerFactory.getLogger(AiMatchJob.class);
+
+    /** One run re-reads the PENDING list this many times, so a re-score that came in while the
+     *  job was being checked is done in the same run. The sweep catches anything later. */
+    static final int MAX_PASSES = 5;
 
     public static final String PENDING = "PENDING", DONE = "DONE", FAILED = "FAILED", OFF = "OFF",
             /** Not AI-matched because the candidate failed step 1 (experience). */
@@ -40,13 +56,23 @@ public class AiMatchJob {
     private final SettingsService settings;
     private final CvMatcher matcher;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher events;
+    private final boolean sweepEnabled;
+    /** Jobs being checked right now on this node. */
+    private final Set<UUID> running = ConcurrentHashMap.newKeySet();
 
     public AiMatchJob(CandidateRepository candidates, SettingsService settings, CvMatcher matcher,
-                      PlatformTransactionManager txManager) {
+                      PlatformTransactionManager txManager, ApplicationEventPublisher events,
+                      @Value("${app.ai-match.sweep-enabled:true}") boolean sweepEnabled) {
         this.candidates = candidates;
         this.settings = settings;
         this.matcher = matcher;
         this.tx = new TransactionTemplate(txManager);
+        // REQUIRES_NEW: when run inline after the screening commit, that finished transaction is
+        // still bound to the thread and would swallow writes (same as AssessmentGenerationJob).
+        this.tx.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
+        this.events = events;
+        this.sweepEnabled = sweepEnabled;
     }
 
     @Async("scoringExecutor")
@@ -55,10 +81,56 @@ public class AiMatchJob {
         run(event.jobId());
     }
 
+    /** Single node: anything still PENDING at startup was cut off by a restart. */
+    @EventListener(ApplicationReadyEvent.class)
+    public void resumeAfterRestart() {
+        if (!sweepEnabled) return;
+        int n = sweep();
+        if (n > 0) log.warn("Resumed the AI check for {} job(s) left pending by a restart", n);
+    }
+
+    @Scheduled(fixedDelayString = "${app.ai-match.sweep-interval-ms:180000}",
+               initialDelayString = "${app.ai-match.sweep-interval-ms:180000}")
+    public void scheduled() {
+        if (!sweepEnabled) return;
+        try {
+            int n = sweep();
+            if (n > 0) log.info("AI check sweep restarted {} job(s) with pending candidates", n);
+        } catch (Exception e) {
+            log.error("AI check sweep failed", e);
+        }
+    }
+
+    /** Starts a check for every job that still has PENDING candidates and isn't being checked
+     *  on this node. Returns how many jobs were started. */
+    public int sweep() {
+        List<UUID> jobs = tx.execute(s -> candidates.findJobIdsByAiMatchStatus(PENDING));
+        int n = 0;
+        for (UUID jobId : jobs == null ? List.<UUID>of() : jobs) {
+            if (running.contains(jobId)) continue;
+            events.publishEvent(new AiMatchRequestedEvent(jobId));
+            n++;
+        }
+        return n;
+    }
+
     record Work(UUID candidateId, String jd, String cv, List<String> mustHave, List<String> niceToHave) {}
 
     public void run(UUID jobId) {
-        List<Work> work = tx.execute(s -> candidates.findByJobIdOrderByFitScoreDesc(jobId).stream()
+        if (!running.add(jobId)) return;   // already being checked; that run re-reads the list
+        try {
+            for (int pass = 0; pass < MAX_PASSES; pass++) {
+                List<Work> work = pending(jobId);
+                if (work == null || work.isEmpty()) return;
+                check(work);
+            }
+        } finally {
+            running.remove(jobId);
+        }
+    }
+
+    private List<Work> pending(UUID jobId) {
+        return tx.execute(s -> candidates.findByJobIdOrderByFitScoreDesc(jobId).stream()
                 .filter(c -> PENDING.equals(c.getAiMatchStatus()))
                 .map(c -> {
                     Job job = c.getJob();
@@ -66,7 +138,9 @@ public class AiMatchJob {
                             List.copyOf(SkillEvidence.mustHave(job)), List.copyOf(SkillEvidence.niceToHave(job)));
                 })
                 .toList());
-        if (work == null || work.isEmpty()) return;
+    }
+
+    private void check(List<Work> work) {
         String apiKey = settings.getGeminiApiKeyOrNull();
         for (Work w : work) {
             if (apiKey == null || apiKey.isBlank()) {
